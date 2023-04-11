@@ -72,7 +72,8 @@ class Block(nn.Module):
 
 CONVNEXT_SETTINGS = {
     'T': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       # [depths, dims, aux_head_chn, dpr]
-    'T_CVST': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       
+    'T_CVST': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],  
+    # 'T_CVST_ROB': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       
     'S': [[3, 3, 27, 3], [96, 192, 384, 768], 384, 0.3],
     'B': [[3, 3, 27, 3], [128, 256, 512, 1024], 512, 0.4]
 }
@@ -168,6 +169,7 @@ class ConvNeXt(nn.Module):
     def load_carefully(self, pretrained):
         ckpt = torch.load(pretrained)['model']
         stt = CONVNEXT_SETTINGS[self.variant][0]
+
         # for nn in ckpt.keys():
         #     print(nn)
         with torch.no_grad():
@@ -193,29 +195,31 @@ class ConvNeXt(nn.Module):
     def load_carefully_cvst(self, pretrained):
         ckpt = torch.load(pretrained)
         stt = CONVNEXT_SETTINGS[self.variant][0]
+        ckpt = {k.replace('module.', ''): v for k, v in ckpt.items()}
+        ckpt = {k.replace('base_model.', ''): v for k, v in ckpt.items()}
         for nn in ckpt.keys():
             print(nn)
         with torch.no_grad():
             for i in [0,1,3,4]:
                 # for p in range(2):
-                self.downsample_layers[0].stem[i].weight.copy_(ckpt[f'module.stem.stem.{i}.weight'])
-                self.downsample_layers[0].stem[i].bias.copy_(ckpt[f'module.stem.stem.{i}.bias'])
+                self.downsample_layers[0].stem[i].weight.copy_(ckpt[f'stem.stem.{i}.weight'])
+                self.downsample_layers[0].stem[i].bias.copy_(ckpt[f'stem.stem.{i}.bias'])
             for l in range(1,4):
                 for p in range(2):
-                    self.downsample_layers[l][p].weight.copy_(ckpt[f'module.stages.{l}.downsample.{p}.weight'])
-                    self.downsample_layers[l][p].bias.copy_(ckpt[f'module.stages.{l}.downsample.{p}.bias'])
+                    self.downsample_layers[l][p].weight.copy_(ckpt[f'stages.{l}.downsample.{p}.weight'])
+                    self.downsample_layers[l][p].bias.copy_(ckpt[f'stages.{l}.downsample.{p}.bias'])
 
             for j in range(4):
                 for k in range(stt[j]):
-                    self.stages[j][k].gamma.copy_(ckpt[f'module.stages.{j}.blocks.{k}.gamma'])
-                    self.stages[j][k].dwconv.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.conv_dw.weight'])
-                    self.stages[j][k].dwconv.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.conv_dw.bias'])
-                    self.stages[j][k].norm.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.norm.weight'])
-                    self.stages[j][k].norm.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.norm.bias'])
-                    self.stages[j][k].pwconv1.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc1.weight'])
-                    self.stages[j][k].pwconv1.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc1.bias'])
-                    self.stages[j][k].pwconv2.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc2.weight'])
-                    self.stages[j][k].pwconv2.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc2.bias'])
+                    self.stages[j][k].gamma.copy_(ckpt[f'stages.{j}.blocks.{k}.gamma'])
+                    self.stages[j][k].dwconv.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.weight'])
+                    self.stages[j][k].dwconv.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.bias'])
+                    self.stages[j][k].norm.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.weight'])
+                    self.stages[j][k].norm.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.bias'])
+                    self.stages[j][k].pwconv1.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.weight'])
+                    self.stages[j][k].pwconv1.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.bias'])
+                    self.stages[j][k].pwconv2.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.weight'])
+                    self.stages[j][k].pwconv2.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.bias'])
 
 
 
@@ -282,6 +286,5 @@ def convnext(backbone, pretrained):
         ckpt = torch.load(pretrained, map_location='cpu', strict=False) #['model']
         ckpt = {k.replace('module.', ''): v for k, v in ckpt.items()}
         ckpt = {k.replace('base_model.', ''): v for k, v in ckpt.items()}
-        ckpt = {k.replace('se_', 'se_module.'): v for k, v in ckpt.items()}
         model.load_state_dict.load_state_dict(ckpt)
     return model

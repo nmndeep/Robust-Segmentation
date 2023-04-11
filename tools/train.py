@@ -91,7 +91,7 @@ class Trainer:
 
 
         self.save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7]}_' +str(cfg['ADDENDUM']) 
-        self.logger = Logger(self.save_path + '.txt')
+        self.logger = Logger(self.save_path)
         if self.gpu == 0:
             print("No. of GPUS:", torch.cuda.device_count())
             self.logger.log(str(cfg))
