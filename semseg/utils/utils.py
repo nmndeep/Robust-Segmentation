@@ -15,7 +15,7 @@ from semseg import models
 
 class Logger():
     def __init__(self, log_path):
-        self.log_path = log_path
+        self.log_path = log_path + '.txt'
 
     def log(self, str_to_log):
         print(str_to_log)
