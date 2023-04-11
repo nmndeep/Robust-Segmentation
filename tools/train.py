@@ -90,8 +90,8 @@ class Trainer:
         self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu]) #, find_unused_parameters=True)
 
 
-        save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7]}_' +str(cfg['ADDENDUM']) + '.txt'
-        self.logger = Logger(save_path)
+        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7]}_' +str(cfg['ADDENDUM']) 
+        self.logger = Logger(self.save_path + '.txt')
         if self.gpu == 0:
             print("No. of GPUS:", torch.cuda.device_count())
             self.logger.log(str(cfg))
@@ -215,7 +215,7 @@ class Trainer:
 
                 if miou > best_mIoU:
                     best_mIoU = miou
-                    torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_dir / f"{self.model_cfg['NAME']}_{self.model_cfg['BACKBONE']}_{self.dataset_cfg['NAME']}.pth")
+                    torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + "_best_mod.pth")
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:

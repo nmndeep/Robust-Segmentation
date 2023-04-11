@@ -70,11 +70,11 @@ class Block(nn.Module):
         return x
 
 
-convnext_settings = {
-    'T': [[3, 3, 9, 3], [96, 192, 384, 768], 0.4],       # [depths, dims, dpr]
-    'T_CVST': [[3, 3, 9, 3], [96, 192, 384, 768], 0.4],       # [depths, dims, dpr]
-    'S': [[3, 3, 27, 3], [96, 192, 384, 768], 0.0],
-    'B': [[3, 3, 27, 3], [128, 256, 512, 1024], 0.0]
+CONVNEXT_SETTINGS = {
+    'T': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       # [depths, dims, aux_head_chn, dpr]
+    'T_CVST': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       
+    'S': [[3, 3, 27, 3], [96, 192, 384, 768], 384, 0.3],
+    'B': [[3, 3, 27, 3], [128, 256, 512, 1024], 512, 0.4]
 }
 
 
@@ -96,8 +96,8 @@ class ConvNeXt(nn.Module):
                  drop_path_rate=0., layer_scale_init_value=1e-6, out_indices=[0, 1, 2, 3]):
         super().__init__()
 
-        assert strr in convnext_settings.keys(), f"ConvNeXt model name should be in {list(convnext_settings.keys())}"
-        depths, dims, drop_path_rate = convnext_settings[strr]
+        assert strr in CONVNEXT_SETTINGS.keys(), f"ConvNeXt model name should be in {list(CONVNEXT_SETTINGS.keys())}"
+        depths, dims, _, drop_path_rate = CONVNEXT_SETTINGS[strr]
         self.variant = strr
 
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
@@ -167,7 +167,7 @@ class ConvNeXt(nn.Module):
 
     def load_carefully(self, pretrained):
         ckpt = torch.load(pretrained)['model']
-        stt = convnext_settings[self.variant][0]
+        stt = CONVNEXT_SETTINGS[self.variant][0]
         # for nn in ckpt.keys():
         #     print(nn)
         with torch.no_grad():
@@ -191,31 +191,31 @@ class ConvNeXt(nn.Module):
 
 
     def load_carefully_cvst(self, pretrained):
-        ckpt = torch.load(pretrained)['model']
-        stt = convnext_settings[self.variant][0]
-        # for nn in ckpt.keys():
-        #     print(nn)
+        ckpt = torch.load(pretrained)
+        stt = CONVNEXT_SETTINGS[self.variant][0]
+        for nn in ckpt.keys():
+            print(nn)
         with torch.no_grad():
-            for i in range(5):
+            for i in [0,1,3,4]:
                 # for p in range(2):
-                self.downsample_layers.stem[i].weight.copy_(ckpt[f'stem.stem.{i}.weight'])
-                self.downsample_layers.stem[i].bias.copy_(ckpt[f'stem.stem.{i}.bias'])
+                self.downsample_layers[0].stem[i].weight.copy_(ckpt[f'module.stem.stem.{i}.weight'])
+                self.downsample_layers[0].stem[i].bias.copy_(ckpt[f'module.stem.stem.{i}.bias'])
             for l in range(1,4):
                 for p in range(2):
-                    self.downsample_layers[i][p].weight.copy_(ckpt[f'stages.{i}.downsample.{p}.weight'])
-                    self.downsample_layers[i][p].bias.copy_(ckpt[f'stages.{i}.downsample.{p}.bias'])
+                    self.downsample_layers[l][p].weight.copy_(ckpt[f'module.stages.{l}.downsample.{p}.weight'])
+                    self.downsample_layers[l][p].bias.copy_(ckpt[f'module.stages.{l}.downsample.{p}.bias'])
 
             for j in range(4):
                 for k in range(stt[j]):
-                    self.stages[j][k].gamma.copy_(ckpt[f'stages.{j}.blocks.{k}.gamma'])
-                    self.stages[j][k].dwconv.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.weight'])
-                    self.stages[j][k].dwconv.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.bias'])
-                    self.stages[j][k].norm.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.weight'])
-                    self.stages[j][k].norm.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.bias'])
-                    self.stages[j][k].pwconv1.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.weight'])
-                    self.stages[j][k].pwconv1.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.bias'])
-                    self.stages[j][k].pwconv2.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.weight'])
-                    self.stages[j][k].pwconv2.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.bias'])
+                    self.stages[j][k].gamma.copy_(ckpt[f'module.stages.{j}.blocks.{k}.gamma'])
+                    self.stages[j][k].dwconv.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.conv_dw.weight'])
+                    self.stages[j][k].dwconv.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.conv_dw.bias'])
+                    self.stages[j][k].norm.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.norm.weight'])
+                    self.stages[j][k].norm.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.norm.bias'])
+                    self.stages[j][k].pwconv1.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc1.weight'])
+                    self.stages[j][k].pwconv1.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc1.bias'])
+                    self.stages[j][k].pwconv2.weight.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc2.weight'])
+                    self.stages[j][k].pwconv2.bias.copy_(ckpt[f'module.stages.{j}.blocks.{k}.mlp.fc2.bias'])
 
 
 
