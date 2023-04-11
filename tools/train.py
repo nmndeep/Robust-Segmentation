@@ -217,9 +217,11 @@ class Trainer:
                     best_mIoU = miou
                     torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_dir / f"{self.model_cfg['NAME']}_{self.model_cfg['BACKBONE']}_{self.dataset_cfg['NAME']}.pth")
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
+
+            if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1
-                self.writer.add_scalar('train/loss', train_loss, iterr//self.iters_per_epoch)
-                train_loss = 0.0 # set loss to zero after every epoch
+                self.writer.add_scalar('train/loss', train_loss, (iterr + 1)//self.iters_per_epoch)
+                train_loss = 0.0  # per epoch loss is Zero
 
         self.writer.close()
         end = time.gmtime(time.time() - time1)

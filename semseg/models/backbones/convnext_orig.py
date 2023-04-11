@@ -98,7 +98,7 @@ class ConvNeXt(nn.Module):
 
         assert strr in convnext_settings.keys(), f"ConvNeXt model name should be in {list(convnext_settings.keys())}"
         depths, dims, drop_path_rate = convnext_settings[strr]
-        # self.backbone = eval(backbone)(variant)
+        self.variant = strr
 
         self.downsample_layers = nn.ModuleList() # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
@@ -145,29 +145,29 @@ class ConvNeXt(nn.Module):
             pretrained (str, optional): Path to pre-trained weights.
                 Defaults to None.
         """
+        self.load_carefully(pretrained) if 'CVST' not in self.variant else self.load_carefully_cvst(pretrained)
+        # def _init_weights(m):
+        #     if isinstance(m, nn.Linear):
+        #         trunc_normal_(m.weight, std=.02)
+        #         if isinstance(m, nn.Linear) and m.bias is not None:
+        #             nn.init.constant_(m.bias, 0)
+        #     elif isinstance(m, nn.LayerNorm):
+        #         nn.init.constant_(m.bias, 0)
+        #         nn.init.constant_(m.weight, 1.0)
 
-        def _init_weights(m):
-            if isinstance(m, nn.Linear):
-                trunc_normal_(m.weight, std=.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.LayerNorm):
-                nn.init.constant_(m.bias, 0)
-                nn.init.constant_(m.weight, 1.0)
-
-        if isinstance(pretrained, str):
-            self.apply(_init_weights)
-            logger = get_root_logger()
-            load_checkpoint(self, pretrained, strict=False, logger=logger)
-        elif pretrained is None:
-            self.apply(_init_weights)
-        else:
-            raise TypeError('pretrained must be a str or None')
+        # if isinstance(pretrained, str):
+        #     self.apply(_init_weights)
+        #     logger = get_root_logger()
+        #     load_checkpoint(self, pretrained, strict=False, logger=logger)
+        # elif pretrained is None:
+        #     self.apply(_init_weights)
+        # else:
+        #     raise TypeError('pretrained must be a str or None')
 
 
     def load_carefully(self, pretrained):
         ckpt = torch.load(pretrained)['model']
-        stt = [3,3,9,3]
+        stt = convnext_settings[self.variant][0]
         # for nn in ckpt.keys():
         #     print(nn)
         with torch.no_grad():
@@ -175,6 +175,8 @@ class ConvNeXt(nn.Module):
                 for p in range(2):
                     self.downsample_layers[i][p].weight.copy_(ckpt[f'downsample_layers.{i}.{p}.weight'])
                     self.downsample_layers[i][p].bias.copy_(ckpt[f'downsample_layers.{i}.{p}.bias'])
+           
+            
             for j in range(4):
                 for k in range(stt[j]):
                     self.stages[j][k].gamma.copy_(ckpt[f'stages.{j}.{k}.gamma'])
@@ -186,6 +188,36 @@ class ConvNeXt(nn.Module):
                     self.stages[j][k].pwconv1.bias.copy_(ckpt[f'stages.{j}.{k}.pwconv1.bias'])
                     self.stages[j][k].pwconv2.weight.copy_(ckpt[f'stages.{j}.{k}.pwconv2.weight'])
                     self.stages[j][k].pwconv2.bias.copy_(ckpt[f'stages.{j}.{k}.pwconv2.bias'])
+
+
+    def load_carefully_cvst(self, pretrained):
+        ckpt = torch.load(pretrained)['model']
+        stt = convnext_settings[self.variant][0]
+        # for nn in ckpt.keys():
+        #     print(nn)
+        with torch.no_grad():
+            for i in range(5):
+                # for p in range(2):
+                self.downsample_layers.stem[i].weight.copy_(ckpt[f'stem.stem.{i}.weight'])
+                self.downsample_layers.stem[i].bias.copy_(ckpt[f'stem.stem.{i}.bias'])
+            for l in range(1,4):
+                for p in range(2):
+                    self.downsample_layers[i][p].weight.copy_(ckpt[f'stages.{i}.downsample.{p}.weight'])
+                    self.downsample_layers[i][p].bias.copy_(ckpt[f'stages.{i}.downsample.{p}.bias'])
+
+            for j in range(4):
+                for k in range(stt[j]):
+                    self.stages[j][k].gamma.copy_(ckpt[f'stages.{j}.blocks.{k}.gamma'])
+                    self.stages[j][k].dwconv.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.weight'])
+                    self.stages[j][k].dwconv.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.conv_dw.bias'])
+                    self.stages[j][k].norm.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.weight'])
+                    self.stages[j][k].norm.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.norm.bias'])
+                    self.stages[j][k].pwconv1.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.weight'])
+                    self.stages[j][k].pwconv1.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc1.bias'])
+                    self.stages[j][k].pwconv2.weight.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.weight'])
+                    self.stages[j][k].pwconv2.bias.copy_(ckpt[f'stages.{j}.blocks.{k}.mlp.fc2.bias'])
+
+
 
 
     def forward_features(self, x):

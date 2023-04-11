@@ -23,12 +23,12 @@ TRAIN:
   DDP           : true           # use DDP training
 
 LOSS:
-  NAME          : OhemCrossEntropy          # loss function name (ohemce, ce, dice)
+  NAME          : CrossEntropy          # loss function name (ohemce, ce, dice)
   CLS_WEIGHTS   : false            # use class weights in loss calculation
 
 OPTIMIZER:
   NAME          : AdamW           # optimizer name
-  LR            : 0.01          # initial learning rate used in optimizer
+  LR            : 0.001          # initial learning rate used in optimizer
   WEIGHT_DECAY  : 0.01            # decay rate used in optimizer 
 
 SCHEDULER:
