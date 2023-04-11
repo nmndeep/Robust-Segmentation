@@ -374,13 +374,15 @@ class UperNetForSemanticSegmentation(nn.Module):
         super().__init__()
 
         # self.backbone = AutoBackbone.from_config(config.backbone_config)
-        self.backbone = ConvNeXt('T')
+        backbone, variant = backbone.split('-')
+
+        self.backbone = ConvNeXt(variant)
         # Semantic segmentation head(s)
         self.decode_head = UperNetHead(in_channels=[96, 192, 384, 768])
         self.auxiliary_head = UperNetFCNHead()
 
         # Initialize weights and apply final processing
-        self.backbone.load_carefully(pretrained)
+        self.backbone.init_weights(pretrained)
         self.decode_head.init_weights()
         self.auxiliary_head.init_weights()
     
