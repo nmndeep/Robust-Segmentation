@@ -9,6 +9,7 @@ from torch.nn import CrossEntropyLoss
 
 from collections import OrderedDict, UserDict
 from semseg.models.backbones import ConvNeXt
+from semseg.models.backbones.convnext_orig import CONVNEXT_SETTINGS
 
 class ModelOutput(OrderedDict):
 
@@ -287,8 +288,7 @@ class UperNetFCNHead(nn.Module):
 
 
     def __init__(
-        self, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, Tuple[int, int]] = 1
-    ) -> None:
+        self, in_index = 2, kernel_size = 3, dilation= 1, in_channels=384) -> None:
         super().__init__()
 
         self.in_channels = 384
@@ -377,9 +377,11 @@ class UperNetForSemanticSegmentation(nn.Module):
         backbone, variant = backbone.split('-')
 
         self.backbone = ConvNeXt(variant)
+        # for nam, _ in self.backbone.named_parameters():
+        #     print(nam)
         # Semantic segmentation head(s)
-        self.decode_head = UperNetHead(in_channels=[96, 192, 384, 768])
-        self.auxiliary_head = UperNetFCNHead()
+        self.decode_head = UperNetHead(in_channels=CONVNEXT_SETTINGS[variant][1])
+        self.auxiliary_head = UperNetFCNHead(in_channels=CONVNEXT_SETTINGS[variant][-2])
 
         # Initialize weights and apply final processing
         self.backbone.init_weights(pretrained)
