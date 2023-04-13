@@ -17,43 +17,18 @@ from torchvision import transforms
 
 from torch import distributed as dist
 from semseg.models import *
-from semseg.models.uper import load_checkpoint
 from semseg.datasets import * 
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
-from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger
+from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
 from val import evaluate
-from semseg.datasets.ade import ADE20KSegmentation
+from semseg.datasets import *
 # from mmcv.utils import Config
 # from mmcv.runner import get_dist_info
-from semseg.datasets.distributed_sampler import DistributedSampler, IterationBasedBatchSampler
+from semseg.datasets.dataset_wrappers import *
 
-datasets = {
-    'ade20k': ADE20KSegmentation}
-
-
-
-def get_segmentation_dataset(name, **kwargs):
-    """Segmentation Datasets"""
-    return datasets[name.lower()](**kwargs)
-
-
-def make_data_sampler(dataset, shuffle, distributed=True):
-    if distributed:
-        return DistributedSampler(dataset, shuffle=shuffle)
-    if shuffle:
-        sampler = RandomSampler(dataset)
-    else:
-        sampler = SequentialSampler(dataset)
-    return sampler
-
-def make_batch_data_sampler(sampler, images_per_batch, num_iters=None, start_iter=0):
-    batch_sampler = data.sampler.BatchSampler(sampler, images_per_batch, drop_last=True)
-    if num_iters is not None:
-        batch_sampler = IterationBasedBatchSampler(batch_sampler, num_iters, start_iter)
-    return batch_sampler
 
 
 class Trainer:
@@ -61,8 +36,6 @@ class Trainer:
     def __init__(self, gpu, cfg):
 
         self.gpu = gpu
-        # self.uid = str(uuid4())
-
 
         self.train_cfg, self.eval_cfg = cfg['TRAIN'], cfg['EVAL']
         self.dataset_cfg, self.model_cfg = cfg['DATASET'], cfg['MODEL']
@@ -74,28 +47,35 @@ class Trainer:
         if self.train_cfg['DDP']:
             self.setup_distributed(world_size=self.world_size)
 
-        self.save_dir = Path(cfg['SAVE_DIR'])
-        self.save_dir.mkdir(exist_ok=True)
-        self.ignore_label  = -1
+
+        self.ignore_label = -1
 
         # self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'])
         self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
-        # self.model = self.model.init_pretrained(self.model_cfg['PRETRAINED'])
-        # self.model = load_checkpoint(self.model, self.model_cfg['PRETRAINED'])
         self.model = self.model.to(self.gpu)
         self.train_loader, self.val_loader = self.dataloaders()
+
+
+        self.save_dir = str(cfg['SAVE_DIR'])
+
+        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM']) 
+        
+        if self.gpu == 0:
+            makedir(self.save_path)
+            makedir(self.save_path +"/results")
+
+        self.logger = Logger(self.save_path + "/train_log")
+        if self.gpu == 0:
+            print("No. of GPUS:", torch.cuda.device_count())
+            self.logger.log(str(cfg))
+            self.logger.log(str(self.model))
 
         self.init_optim_log()
 
         self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu]) #, find_unused_parameters=True)
 
 
-        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7]}_' +str(cfg['ADDENDUM']) 
-        self.logger = Logger(self.save_path + '.txt')
-        if self.gpu == 0:
-            print("No. of GPUS:", torch.cuda.device_count())
-            self.logger.log(str(cfg))
-            self.logger.log(str(self.model))
+       
     
 
     def setup_distributed(self, address='localhost', port='12354', world_size=6):
@@ -120,7 +100,7 @@ class Trainer:
         # self.scheduler2 = get_scheduler(self.sched_cfg['NAME'], self.optimizer[1], self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
 
         self.scaler = GradScaler(enabled=self.train_cfg['AMP'])
-        self.writer = SummaryWriter(str(self.save_dir / 'logs'))
+        self.writer = SummaryWriter(self.save_path + "/results")
 
 
     def dataloaders(self):
@@ -215,7 +195,7 @@ class Trainer:
 
                 if miou > best_mIoU:
                     best_mIoU = miou
-                    torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + "_best_mod.pth")
+                    torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + "/best_model_ckpt.pth")
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
@@ -236,7 +216,6 @@ class Trainer:
             self.logger.log(str(tabulate(table, numalign='right')))
 
 
-
     @classmethod
     def launch_from_args(cls, world_size, cfg):
         distributed=True
@@ -254,7 +233,6 @@ class Trainer:
         trainer = cls(gpu=gpu, cfg=cfg)
         trainer.main()
         trainer.cleanup_distributed()
-
 
 
 if __name__ == '__main__':
