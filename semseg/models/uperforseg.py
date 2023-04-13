@@ -384,9 +384,10 @@ class UperNetForSemanticSegmentation(nn.Module):
         self.auxiliary_head = UperNetFCNHead(in_channels=CONVNEXT_SETTINGS[variant][-2])
 
         # Initialize weights and apply final processing
-        self.backbone.init_weights(pretrained)
-        self.decode_head.init_weights()
-        self.auxiliary_head.init_weights()
+        if pretrained is not None:
+            self.backbone.init_weights(pretrained)
+            self.decode_head.init_weights()
+            self.auxiliary_head.init_weights()
     
     def forward(
         self,

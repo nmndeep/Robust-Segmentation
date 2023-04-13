@@ -13,6 +13,11 @@ from torch import distributed as dist
 from tabulate import tabulate
 from semseg import models
 
+
+def makedir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
 class Logger():
     def __init__(self, log_path):
         self.log_path = log_path + '.txt'
