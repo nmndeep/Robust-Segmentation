@@ -94,7 +94,7 @@ class ConvNeXt(nn.Module):
         head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
     """
     def __init__(self, strr, in_chans=3, depths=[3, 3, 9, 3], dims=[96, 192, 384, 768], 
-                 drop_path_rate=0., layer_scale_init_value=1e-6, out_indices=[0, 1, 2, 3]):
+                 drop_path_rate=0., layer_scale_init_value=1.0, out_indices=[0, 1, 2, 3]):
         super().__init__()
 
         assert strr in CONVNEXT_SETTINGS.keys(), f"ConvNeXt model name should be in {list(CONVNEXT_SETTINGS.keys())}"
@@ -170,8 +170,7 @@ class ConvNeXt(nn.Module):
         ckpt = torch.load(pretrained)['model']
         stt = CONVNEXT_SETTINGS[self.variant][0]
 
-        # for nn in ckpt.keys():
-        #     print(nn)
+
         with torch.no_grad():
             for i in range(4):
                 for p in range(2):
@@ -197,8 +196,8 @@ class ConvNeXt(nn.Module):
         stt = CONVNEXT_SETTINGS[self.variant][0]
         ckpt = {k.replace('module.', ''): v for k, v in ckpt.items()}
         ckpt = {k.replace('base_model.', ''): v for k, v in ckpt.items()}
-        for nn in ckpt.keys():
-            print(nn)
+        # for nn in ckpt.keys():
+        #     print(nn)
         with torch.no_grad():
             for i in [0,1,3,4]:
                 # for p in range(2):
