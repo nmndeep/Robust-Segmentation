@@ -19,7 +19,7 @@ class SegmentationDataset(object):
         self.split = split
         self.mode = mode if mode is not None else split
         self.base_size = base_size
-        self.crop_size = crop_size
+        self.crop_size = crop_size[0]
 
     def _val_sync_transform(self, img, mask):
         outsize = self.crop_size

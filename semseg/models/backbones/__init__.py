@@ -1,4 +1,4 @@
-from .resnet import ResNet, resnet_settings
+from .resnet import ResNet
 from .resnetd import ResNetD, resnetd_settings
 from .pvt import PVTv2, pvtv2_settings
 from .rest import ResT, rest_settings

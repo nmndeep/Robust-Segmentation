@@ -13,8 +13,9 @@ DATASET:
   IGNORE_LABEL  : -1
   N_CLS         : 150
   SEED          : 0
-  
+
 TRAIN:
+  BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]      # training image size in (h, w)
   BATCH_SIZE    : 36                 # batch size used to train
   EPOCHS        : 128             # number of epochs to train
@@ -40,6 +41,7 @@ SCHEDULER:
 
 EVAL:
   MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
+  BASE_SIZE     : 520 
   IMAGE_SIZE    : [512, 512]                                                            # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
