@@ -56,13 +56,14 @@ class Trainer:
 
         self.save_dir = str(cfg['SAVE_DIR'])
 
-        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM']) 
+      
         
         if self.gpu == 0:
+            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'])
             makedir(self.save_path)
             makedir(self.save_path +"/results")
 
-        self.logger = Logger(self.save_path + "/train_log")
+            self.logger = Logger(self.save_path + "/train_log")
 
         self.train_loader, self.val_loader = self.dataloaders()
 
@@ -100,7 +101,7 @@ class Trainer:
         # self.scheduler2 = get_scheduler(self.sched_cfg['NAME'], self.optimizer[1], self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
 
         self.scaler = GradScaler(enabled=self.train_cfg['AMP'])
-        self.writer = SummaryWriter(self.save_path + "/results")
+        # self.writer = SummaryWriter(self.save_path + "/results")
 
 
     def dataloaders(self):
@@ -191,8 +192,9 @@ class Trainer:
             if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*5) == 0:
                 # print("yup")
                 miou = evaluate(model, self.val_loader, self.gpu)[-1]
-                self.writer.add_scalar('val/mIoU', miou, iterr//self.iters_per_epoch)
+                # self.writer.add_scalar('val/mIoU', miou, iterr//self.iters_per_epoch)
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
+                model.train()
 
                 if miou > best_mIoU:
                     best_mIoU = miou
@@ -201,10 +203,10 @@ class Trainer:
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1
-                self.writer.add_scalar('train/loss', train_loss, (iterr + 1)//self.iters_per_epoch)
+                # self.writer.add_scalar('train/loss', train_loss, (iterr + 1)//self.iters_per_epoch)
                 train_loss = 0.0  # per epoch loss is Zero
 
-        self.writer.close()
+        # self.writer.close()
         end = time.gmtime(time.time() - time1)
 
         table = [
