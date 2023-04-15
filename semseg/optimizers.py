@@ -36,61 +36,17 @@ def group_weight(model, idx = 0):
     other_params = []
     # module= model.backbone
     # if idx == 0:
-    modules= [model.backbone, model.decode_head, model.auxiliary_head]
-    for j in modules:
-        for name, param in j.named_parameters():
-            if not param.requires_grad:
-                continue
-            if param.ndim <= 1 or "norm" in name: #or name in no_weight_decay_list
-                group_no_decay.append(param)
-                # group_no_decay.append(name.bias)
-            else:
-                group_decay.append(param)
+    # modules= [model.backbone, model.decode_head, model.auxiliary_head]
+    # for j in model:
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim <= 1 or "norm" in name: #or name in no_weight_decay_list
+            group_no_decay.append(param)
+            # group_no_decay.append(name.bias)
+        else:
+            group_decay.append(param)
     assert len(list(model.parameters())) == len(group_decay) + len(group_no_decay)
-    # module = model.decode_head
-    # # else:
-    # paramss = 0
-    # for mod in module:
-    #     for m in mod.modules():
-    #         if isinstance(m, nn.Linear):
-    #             group_decay.append(m.weight)
-    #             if m.bias is not None:
-    #                 group_no_decay.append(m.bias)
-    #         elif isinstance(m, nn.Conv2d):
-    #             group_decay.append(m.weight)
-    #             if m.bias is not None:
-    #                 group_no_decay.append(m.bias)
-    #         elif isinstance(m, nn.BatchNorm2d):
-    #             if m.weight is not None:
-    #                 group_no_decay.append(m.weight)
-    #             if m.bias is not None:
-    #                 group_no_decay.append(m.bias)
-    #         elif isinstance(m, LayerNorm):
-    #             if m.weight is not None:
-    #                 group_no_decay.append(m.weight)
-    #             if m.bias is not None:
-    #                 group_no_decay.append(m.bias)
-    #         elif isinstance(m, nn.Parameter):
-    #             if m.weight is not None:
-    #                 group_no_decay.append(m.weight)
-    #             if m.bias is not None:
-    #                 group_no_decay.append(m.bias)
-    #     paramss+= len(list(mod.parameters()))
-    # assert paramss == len(group_decay) + len(group_no_decay)
-
-    # for m in module.modules():
-    #     # print(name)
-    #     idd+=1
-
-  
-        # elif isinstance(m, Block):
-        #     for mm in m.modules():
-        #         print(mm)
-        #         idd+=1
-        #         if mm.weight is not None:
-        #             group_no_decay.append(mm.weight)
-        #         if mm.bias is not None:
-        #             group_no_decay.append(mm.bias)
 
     # print(idd, len(list(module.parameters())), len(group_decay), len(group_no_decay))
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]

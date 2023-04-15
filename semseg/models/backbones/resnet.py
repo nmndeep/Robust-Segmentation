@@ -1,108 +1,229 @@
-import torch 
-from torch import nn, Tensor
-from torch.nn import functional as F
+import torch
+import torch.nn as nn
+import math
+import torch.utils.model_zoo as model_zoo
 
 
-class BasicBlock(nn.Module):
-    """2 Layer No Expansion Block
-    """
-    expansion: int = 1
-    def __init__(self, c1, c2, s=1, downsample= None) -> None:
-        super().__init__()
-        self.conv1 = nn.Conv2d(c1, c2, 3, s, 1, bias=False)
-        self.bn1 = nn.BatchNorm2d(c2)
-        self.conv2 = nn.Conv2d(c2, c2, 3, 1, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(c2)
-        self.downsample = downsample
-
-    def forward(self, x: Tensor) -> Tensor:
-        identity = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        if self.downsample is not None: identity = self.downsample(x)
-        out += identity
-        return F.relu(out)
+__all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
+           'resnet152']
 
 
-class Bottleneck(nn.Module):
-    """3 Layer 4x Expansion Block
-    """
-    expansion: int = 4
-    def __init__(self, c1, c2, s=1, downsample=None) -> None:
-        super().__init__()
-        self.conv1 = nn.Conv2d(c1, c2, 1, 1, 0, bias=False)
-        self.bn1 = nn.BatchNorm2d(c2)
-        self.conv2 = nn.Conv2d(c2, c2, 3, s, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(c2)
-        self.conv3 = nn.Conv2d(c2, c2 * self.expansion, 1, 1, 0, bias=False)
-        self.bn3 = nn.BatchNorm2d(c2 * self.expansion)
-        self.downsample = downsample
-
-    def forward(self, x: Tensor) -> Tensor:
-        identity = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
-        if self.downsample is not None: identity = self.downsample(x)
-        out += identity
-        return F.relu(out)
-
-
-resnet_settings = {
-    '18': [BasicBlock, [2, 2, 2, 2], [64, 128, 256, 512]],
-    '34': [BasicBlock, [3, 4, 6, 3], [64, 128, 256, 512]],
-    '50': [Bottleneck, [3, 4, 6, 3], [256, 512, 1024, 2048]],
-    '101': [Bottleneck, [3, 4, 23, 3], [256, 512, 1024, 2048]],
-    '152': [Bottleneck, [3, 8, 36, 3], [256, 512, 1024, 2048]]
+model_urls = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
 }
 
 
+def conv3x3(in_planes, out_planes, stride=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=1, bias=False)
+
+
+class BasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+        super(BasicBlock, self).__init__()
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+        super(Bottleneck, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, planes * self.expansion, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
 class ResNet(nn.Module):
-    def __init__(self, model_name: str = '50') -> None:
-        super().__init__()
-        assert model_name in resnet_settings.keys(), f"ResNet model name should be in {list(resnet_settings.keys())}"
-        block, depths, channels = resnet_settings[model_name]
 
-        self.inplanes = 64
-        self.channels = channels
-        self.conv1 = nn.Conv2d(3, self.inplanes, 7, 2, 3, bias=False)
-        self.bn1 = nn.BatchNorm2d(self.inplanes)
-        self.maxpool = nn.MaxPool2d(3, 2, 1)
+    def __init__(self, block, layers, num_classes=1000, deep_base=True):
+        super(ResNet, self).__init__()
+        self.deep_base = deep_base
+        if not self.deep_base:
+            self.inplanes = 64
+            self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            self.bn1 = nn.BatchNorm2d(64)
+        else:
+            self.inplanes = 128
+            self.conv1 = conv3x3(3, 64, stride=2)
+            self.bn1 = nn.BatchNorm2d(64)
+            self.conv2 = conv3x3(64, 64)
+            self.bn2 = nn.BatchNorm2d(64)
+            self.conv3 = conv3x3(64, 128)
+            self.bn3 = nn.BatchNorm2d(128)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.avgpool = nn.AvgPool2d(7, stride=1)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
 
-        self.layer1 = self._make_layer(block, 64, depths[0], s=1)
-        self.layer2 = self._make_layer(block, 128, depths[1], s=2)
-        self.layer3 = self._make_layer(block, 256, depths[2], s=2)
-        self.layer4 = self._make_layer(block, 512, depths[3], s=2)
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
-
-    def _make_layer(self, block, planes, depth, s=1) -> nn.Sequential:
+    def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
-        if s != 1 or self.inplanes != planes * block.expansion:
+        if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion, 1, s, bias=False),
-                nn.BatchNorm2d(planes * block.expansion)
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
             )
-        layers = nn.Sequential(
-            block(self.inplanes, planes, s, downsample),
-            *[block(planes * block.expansion, planes) for _ in range(1, depth)]
-        )
+
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
         self.inplanes = planes * block.expansion
-        return layers
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+        if self.deep_base:
+            x = self.relu(self.bn2(self.conv2(x)))
+            x = self.relu(self.bn3(self.conv3(x)))
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
 
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.maxpool(F.relu(self.bn1(self.conv1(x))))   # [1, 64, H/4, W/4]
-        x1 = self.layer1(x)  # [1, 64/256, H/4, W/4]   
-        x2 = self.layer2(x1)  # [1, 128/512, H/8, W/8]
-        x3 = self.layer3(x2)  # [1, 256/1024, H/16, W/16]
-        x4 = self.layer4(x3)  # [1, 512/2048, H/32, W/32]
-        return x1, x2, x3, x4
+def resnet18(pretrained='', **kwargs):
+    """Constructs a ResNet-18 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
+    if pretrained is not None:
+        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+    return model
 
 
-if __name__ == '__main__':
-    model = ResNet('18')
-    # model.load_state_dict(torch.load('C:\\Users\\sithu\\Documents\\weights\\backbones\\resnet\\resnet18_a1.pth', map_location='cpu'), strict=False)
-    x = torch.zeros(1, 3, 224, 224)
-    outs = model(x)
-    for y in outs:
-        print(y.shape) 
+def resnet34(pretrained=False, **kwargs):
+    """Constructs a ResNet-34 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(BasicBlock, [3, 4, 6, 3], **kwargs)
+    if pretrained:
+        model.load_state_dict(model_zoo.load_url(model_urls['resnet34']))
+    return model
+
+
+def resnet50(pretrained=False, **kwargs):
+    """Constructs a ResNet-50 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
+    if pretrained is not None:
+        # model.load_state_dict(model_zoo.load_url(model_urls['resnet50']))
+        model_path = './initmodel/resnet50_v2.pth'
+        model.load_state_dict(torch.load(pretrained), strict=False)
+    return model
+
+
+def resnet101(pretrained=False, **kwargs):
+    """Constructs a ResNet-101 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 4, 23, 3], **kwargs)
+    if pretrained:
+        # model.load_state_dict(model_zoo.load_url(model_urls['resnet101']))
+        model_path = './initmodel/resnet101_v2.pth'
+        model.load_state_dict(torch.load(model_path), strict=False)
+    return model
+
+
+def resnet152(pretrained=False, **kwargs):
+    """Constructs a ResNet-152 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
+    if pretrained:
+        # model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
+        model_path = './initmodel/resnet152_v2.pth'
+        model.load_state_dict(torch.load(model_path), strict=False)
+    return model

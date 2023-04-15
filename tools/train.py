@@ -24,7 +24,6 @@ from semseg.schedulers import get_scheduler
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
 from val import evaluate
-from semseg.datasets import *
 # from mmcv.utils import Config
 # from mmcv.runner import get_dist_info
 from semseg.datasets.dataset_wrappers import *
@@ -53,18 +52,20 @@ class Trainer:
         # self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'])
         self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
         self.model = self.model.to(self.gpu)
-        self.train_loader, self.val_loader = self.dataloaders()
 
 
         self.save_dir = str(cfg['SAVE_DIR'])
 
-        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM']) 
+        self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM']) 
         
         if self.gpu == 0:
             makedir(self.save_path)
             makedir(self.save_path +"/results")
 
         self.logger = Logger(self.save_path + "/train_log")
+
+        self.train_loader, self.val_loader = self.dataloaders()
+
         if self.gpu == 0:
             print("No. of GPUS:", torch.cuda.device_count())
             self.logger.log(str(cfg))
@@ -75,7 +76,6 @@ class Trainer:
         self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu]) #, find_unused_parameters=True)
 
 
-       
     
 
     def setup_distributed(self, address='localhost', port='12354', world_size=6):
@@ -111,9 +111,10 @@ class Trainer:
             transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
         ])
         # dataset and dataloader
-        data_kwargs = {'transform': input_transform, 'base_size': 520, 'crop_size': 512}
+        data_kwargs = {'transform': input_transform, 'base_size': self.train_cfg['BASE_SIZE'], 'crop_size': self.train_cfg['IMAGE_SIZE']}
         train_dataset = get_segmentation_dataset(self.dataset_cfg['NAME'], root=self.dataset_cfg['ROOT'],split='train', mode='train', **data_kwargs)
 
+        data_kwargs = {'transform': input_transform, 'base_size': self.eval_cfg['BASE_SIZE'], 'crop_size': self.eval_cfg['IMAGE_SIZE']}
 
         val_dataset = get_segmentation_dataset(self.dataset_cfg['NAME'], root=self.dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
         self.iters_per_epoch = len(train_dataset) // (self.world_size * self.bs)

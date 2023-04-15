@@ -192,14 +192,15 @@ class UperNetPyramidPoolingModule(nn.Module):
 class UperNetHead(nn.Module):
 
 
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, cls):
         super().__init__()
 
         self.pool_scales = (1, 2, 3, 6)
         self.in_channels = [96, 192, 384, 768]
         self.channels = 512
         self.align_corners = False
-        self.classifier = nn.Conv2d(self.channels, 150, kernel_size=1)
+        self.cls = cls
+        self.classifier = nn.Conv2d(self.channels, self.cls, kernel_size=1)
 
         # PSP Module
         self.psp_modules = UperNetPyramidPoolingModule(
@@ -288,7 +289,7 @@ class UperNetFCNHead(nn.Module):
 
 
     def __init__(
-        self, in_index = 2, kernel_size = 3, dilation= 1, in_channels=384) -> None:
+        self, in_index = 2, kernel_size = 3, dilation= 1, in_channels=384, cls=150) -> None:
         super().__init__()
 
         self.in_channels = 384
@@ -296,7 +297,7 @@ class UperNetFCNHead(nn.Module):
         self.num_convs = 1
         self.concat_input = False
         self.in_index = in_index
-
+        self.cls = cls
         conv_padding = (kernel_size // 2) * dilation
         convs = []
         convs.append(
@@ -319,7 +320,7 @@ class UperNetFCNHead(nn.Module):
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 
-        self.classifier = nn.Conv2d(self.channels, 150, kernel_size=1)
+        self.classifier = nn.Conv2d(self.channels, self.cls, kernel_size=1)
 
     def init_weights(self):
         self.apply(self._init_weights)
@@ -380,8 +381,8 @@ class UperNetForSemanticSegmentation(nn.Module):
         # for nam, _ in self.backbone.named_parameters():
         #     print(nam)
         # Semantic segmentation head(s)
-        self.decode_head = UperNetHead(in_channels=CONVNEXT_SETTINGS[variant][1])
-        self.auxiliary_head = UperNetFCNHead(in_channels=CONVNEXT_SETTINGS[variant][-2])
+        self.decode_head = UperNetHead(in_channels=CONVNEXT_SETTINGS[variant][1], cls=n_cls)
+        self.auxiliary_head = UperNetFCNHead(in_channels=CONVNEXT_SETTINGS[variant][-2], cls=n_cls)
 
         # Initialize weights and apply final processing
         if pretrained is not None:
@@ -413,13 +414,13 @@ class UperNetForSemanticSegmentation(nn.Module):
         features = self.backbone(pixel_values)
 
         logits = self.decode_head(features)
-        logits = nn.functional.interpolate(logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False)
+        logits = nn.functional.interpolate(logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=True)
 
         auxiliary_logits = None
         if self.auxiliary_head is not None:
             auxiliary_logits = self.auxiliary_head(features)
             auxiliary_logits = nn.functional.interpolate(
-                auxiliary_logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False
+                auxiliary_logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=True
             )
 
         loss = None
@@ -428,8 +429,10 @@ class UperNetForSemanticSegmentation(nn.Module):
             main_loss = loss_fct(logits, labels)
             auxiliary_loss = loss_fct(auxiliary_logits, labels)
             loss = main_loss + 0.4 * auxiliary_loss
-
-        return loss, logits
+        if self.training:
+            return loss, logits
+        else:
+            return logits
 
         # if not return_dict:
         #     if output_hidden_states:
