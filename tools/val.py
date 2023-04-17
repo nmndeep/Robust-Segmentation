@@ -12,7 +12,9 @@ from semseg.datasets import *
 from semseg.augmentations import get_val_augmentation
 from semseg.metrics import Metrics
 from semseg.utils.utils import setup_cudnn
-
+import torch.nn as nn
+from torch.utils.data import DataLoader
+import torchvision
 
 @torch.no_grad()
 def evaluate(model, dataloader, device):
@@ -24,7 +26,7 @@ def evaluate(model, dataloader, device):
     for i, (images, labels, _) in enumerate(dataloader):
         images = images.to(device)
         labels = labels.to(device)
-        _, preds = model(pixel_values=images, labels=labels)
+        preds = model(pixel_values=images, labels=labels)
         metrics.update(preds.softmax(dim=1), labels)
     
     ious, miou = metrics.compute_iou()
@@ -32,6 +34,21 @@ def evaluate(model, dataloader, device):
     f1, mf1 = metrics.compute_f1()
     
     return acc, macc, f1, mf1, ious, miou
+
+
+def pgd(model, X, y, epsilon, alpha, num_iter): # Untargetted Attack
+    
+    delta = torch.zeros_like(X, requires_grad=True)
+    trg = y.squeeze(1)
+    
+    for t in range(num_iter):
+        loss = nn.CrossEntropyLoss(ignore_index = -1)(model(X + delta, y)[1], trg.long())
+        loss.backward()
+        delta.data = (delta + X.shape[0]*alpha*delta.grad.data).clamp(-epsilon,epsilon)
+        delta.grad.zero_()
+    print('Loss after iteration {}: {:.2f}'.format(t+1, loss.item()))
+    return delta.detach()
+
 
 
 @torch.no_grad()
