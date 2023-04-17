@@ -429,10 +429,10 @@ class UperNetForSemanticSegmentation(nn.Module):
             main_loss = loss_fct(logits, labels)
             auxiliary_loss = loss_fct(auxiliary_logits, labels)
             loss = main_loss + 0.4 * auxiliary_loss
-        # if self.training:
-        return loss, logits
-        # else:
-        #     return logits
+        if self.training:
+            return loss, logits
+        else:
+            return logits
 
         # if not return_dict:
         #     if output_hidden_states:

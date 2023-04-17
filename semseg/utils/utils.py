@@ -15,6 +15,8 @@ from semseg import models
 
 
 def makedir(path):
+
+
     if not os.path.exists(path):
         os.makedirs(path)
 

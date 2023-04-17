@@ -6,11 +6,8 @@ from torch import Tensor
 from torch.nn import functional as F
 from pathlib import Path
 from torchvision import io
-from semseg.models import *
-from semseg.datasets import *
 from semseg.utils.utils import timer
 from semseg.utils.visualize import draw_text
-from semseg.datasets.dataset_wrappers import *
 import torch.utils.data as data
 from torchvision import transforms
 from rich.console import Console
@@ -19,10 +16,24 @@ from matplotlib import pyplot as plt
 import cv2
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
-
+from tools.val import pgd
 from PIL import Image, ImageDraw, ImageFont
+import gc
 
 from semseg.utils.visualize import generate_palette
+from semseg.models import *
+from semseg.datasets import * 
+from semseg.augmentations import get_train_augmentation, get_val_augmentation
+from semseg.losses import get_loss
+from semseg.schedulers import get_scheduler
+from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
+from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
+from val import evaluate
+from semseg.metrics import Metrics
+
+# from mmcv.utils import Config
+# from mmcv.runner import get_dist_info
+from semseg.datasets.dataset_wrappers import *
 console = Console()
 SEED = 225
 
@@ -34,6 +45,36 @@ def seed_worker(worker_id):
 
 g = torch.Generator()
 g.manual_seed(SEED)
+
+
+def IoUAcc(y_trg, y_pred, classes = 21):
+
+    trg = y_trg.squeeze(1)
+    pred = y_pred
+    iou_list = list()
+    present_iou_list = list()
+
+    pred = pred.view(-1)
+    trg = trg.view(-1)
+    for sem_class in range(classes): # loop over each class for IoU calculation
+        pred_inds = (pred == sem_class)
+        target_inds = (trg == sem_class)
+        if target_inds.long().sum().item() == 0:
+            iou_now = float('nan')
+            #print('Class {} IoU is {}'.format(class_names[sem_class+1], iou_now))
+        else: 
+            intersection_now = (pred_inds[target_inds]).long().sum().item()
+            union_now = pred_inds.long().sum().item() + target_inds.long().sum().item() - intersection_now
+            iou_now = float(intersection_now) / float(union_now)
+            #print('Class {} IoU is {}'.format(class_names[sem_class+1], iou_now))
+            present_iou_list.append(iou_now)
+        iou_list.append(iou_now)
+        
+    
+    return np.mean(present_iou_list)*100
+
+
+
 
 
 class SemSeg:
@@ -125,7 +166,8 @@ def get_val_data(dataset_cfg):
         transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
     ])
     # dataset and dataloader
-    data_kwargs = {'transform': input_transform, 'base_size': 520, 'crop_size': 512}
+    data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': [473, 473]}
+
 
     val_dataset = get_segmentation_dataset(dataset_cfg['NAME'], root=dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
 
@@ -135,6 +177,9 @@ def get_val_data(dataset_cfg):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
+    parser.add_argument('--eps', type=float, default=2./255.)
+    parser.add_argument('--n_iter', type=int, default=5)
+
     args = parser.parse_args()
 
     with open(args.cfg) as f:
@@ -142,20 +187,48 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    test_data = get_val_data(dataset_cfg)
+    model = eval(model_cfg['NAME'])(model_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
+    model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
+    model = model.to('cuda')
 
-    # if not test_file.exists():
-    #     raise FileNotFoundError(test_file)
+    val_data = get_val_data(dataset_cfg)
+    dataloader = DataLoader(val_data, shuffle=True, batch_size=test_cfg['BATCH_SIZE'],     worker_init_fn=seed_worker, generator=g)
 
     console.print(f"Model > [yellow]{cfg['MODEL']['NAME']} {cfg['MODEL']['BACKBONE']}[/yellow]")
     console.print(f"Dataset > [yellow]{cfg['DATASET']['NAME']}[/yellow]")
 
     save_dir = Path(cfg['SAVE_DIR']) / 'test_results'
     save_dir.mkdir(exist_ok=True)
-    
-    semseg = SemSeg(cfg, save_dir)
-    with console.status("[bright_green]Processing..."):
-        segmap = semseg.predict(test_data)
+
+    preds = []
+    lblss = []
+    metrics = Metrics(150, -1, 'cuda')
+
+    for iterr, (img, lbl, _) in enumerate(dataloader):
+        model.train()
+        img = img.to('cuda')
+        lbl = lbl.to('cuda')
+
+        delta1 = pgd(model, img, lbl, epsilon=args.eps, alpha=1e2, num_iter=args.n_iter) # Various values of epsilon, alpha can be used to play with.
+        model.eval()
+        ypa1 = model((img.float() + delta1.float()), lbl)
+        gc.collect()
+        metrics.update(ypa1.softmax(dim=1), lbl)
+        # preds.append(ypa1.detach().cpu())
+        # lblss.append(lbl.detach().cpu())
+        if iterr == 20:
+            break
+    # pred = torch.cat(preds)
+    # lblss = torch.cat(lblss)
+    # print(pred.shape)
+    # print(lblss.shape)
+    # mIouC = IoUAcc(lblss, pred, classes = dataset_cfg['N_CLS'])
+    ious, miou = metrics.compute_iou()
+    print(miou)
+
+    # semseg = SemSeg(cfg, save_dir)
+    # with console.status("[bright_green]Processing..."):
+    #     segmap = semseg.predict(test_data)
 
         # if test_file.is_file():
         #     console.rule(f'[green]{test_file}')

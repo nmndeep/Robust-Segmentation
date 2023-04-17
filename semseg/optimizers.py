@@ -15,8 +15,7 @@ def get_optimizer(model: nn.Module, optimizer: str, lr: float, weight_decay: flo
     #     {"params": group_weight(model.get_decoder_params(), 1)}
 
     # ]
-    paramss = group_weight(model)
-    # add_params(paramss, model, lr, weight_decay)
+    paramss = group_weight(model)# add_params(paramss, model, lr, weight_decay)
     # print(paramss)
     # print(paramss)
 
@@ -35,16 +34,16 @@ def group_weight(model, idx = 0):
     other_params = []
     # module= model.backbone
     # if idx == 0:
-    modules= [model.backbone, model.decode_head, model.auxiliary_head]
-    for j in modules:
-        for name, param in j.named_parameters():
-            if not param.requires_grad:
-                continue
-            if param.ndim <= 1 or "norm" in name: #or name in no_weight_decay_list
-                group_no_decay.append(param)
-                # group_no_decay.append(name.bias)
-            else:
-                group_decay.append(param)
+    # modules= [model.backbone, model.decode_head, model.auxiliary_head]
+    # for j in model:
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if param.ndim <= 1 or "norm" in name: #or name in no_weight_decay_list
+            group_no_decay.append(param)
+            # group_no_decay.append(name.bias)
+        else:
+            group_decay.append(param)
     assert len(list(model.parameters())) == len(group_decay) + len(group_no_decay)
     # module = model.decode_head
     # # else:
