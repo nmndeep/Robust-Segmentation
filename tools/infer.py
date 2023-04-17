@@ -203,6 +203,7 @@ if __name__ == '__main__':
     preds = []
     lblss = []
     metrics = Metrics(150, -1, 'cuda')
+    metrics_clean = Metrics(150, -1, 'cuda')
 
     for iterr, (img, lbl, _) in enumerate(dataloader):
         model.train()
@@ -213,7 +214,10 @@ if __name__ == '__main__':
         model.eval()
         ypa1 = model((img.float() + delta1.float()), lbl)
         gc.collect()
+        ypa_c = model(img.float(), lbl)
         metrics.update(ypa1.softmax(dim=1), lbl)
+        metrics_clean.update(ypa_c.softmax(dim=1), lbl)
+
         # preds.append(ypa1.detach().cpu())
         # lblss.append(lbl.detach().cpu())
         if iterr == 20:
@@ -224,8 +228,12 @@ if __name__ == '__main__':
     # print(lblss.shape)
     # mIouC = IoUAcc(lblss, pred, classes = dataset_cfg['N_CLS'])
     ious, miou = metrics.compute_iou()
+    _, miou_c = metrics_clean.compute_iou()
     print(miou)
-
+    with open(cfg['SAVE_DIR'] + "/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt", 'w') as f:
+        f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}")
+        f.write(f"Clean mIoU {miou_c}")
+        f.write(f"PGD: eps: {args.eps}, iter : {args.n_iter} -- mIoU {miou}")
     # semseg = SemSeg(cfg, save_dir)
     # with console.status("[bright_green]Processing..."):
     #     segmap = semseg.predict(test_data)
