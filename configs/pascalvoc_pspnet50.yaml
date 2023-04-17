@@ -17,7 +17,7 @@ DATASET:
 TRAIN:
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
-  BATCH_SIZE    : 32                 # batch size used to train
+  BATCH_SIZE    : 36                 # batch size used to train
   EPOCHS        : 50             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   AMP           : false           # use AMP in training
@@ -28,9 +28,9 @@ LOSS:
   CLS_WEIGHTS   : false            # use class weights in loss calculation
 
 OPTIMIZER:
-  NAME          : adamw           # optimizer name
+  NAME          : AdamW           # optimizer name
   LR            : 0.001           # initial learning rate used in optimizer
-  WEIGHT_DECAY  : 0.001            # decay rate used in optimizer 
+  WEIGHT_DECAY  : 0.01            # decay rate used in optimizer 
 
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
@@ -40,9 +40,10 @@ SCHEDULER:
   
 
 EVAL:
-  MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/PSPNet_ResNet-50_2023-04-16-11_44_57_CLEAN_RN50_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
-  IMAGE_SIZE    : [473, 473]                                                            # evaluation image size in (h, w)                       
+  IMAGE_SIZE    : [473, 473]                 
+  BATCH_SIZE    : 16                                            # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  

@@ -14,6 +14,6 @@ for ADE20k dataset
 
   | init_method  |val mIou% |
  -|--------------|----------|
-1 | ConvNexT-T   |   42.9%	|
-2 | ConvNexT-CvsT|   41.8%	|
+1 | ConvNexT-T   |   43.9%	| 46.0
+2 | ConvNexT-CvsT|   42.5%	|
 3 | CvNxT-CvStRob|   41.4%	|

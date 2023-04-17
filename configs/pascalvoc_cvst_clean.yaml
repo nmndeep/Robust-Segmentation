@@ -40,9 +40,10 @@ SCHEDULER:
   
 
 EVAL:
-  MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_2023-04-15-19_31_19_CLEAN_CVST_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
-  IMAGE_SIZE    : [473, 473]                                                            # evaluation image size in (h, w)                       
+  IMAGE_SIZE    : [473, 473]                 
+  BATCH_SIZE    : 16                                                                       # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
