@@ -96,7 +96,7 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
     parser.add_argument('--eps', type=float, default=4./255.)
     parser.add_argument('--n_iter', type=int, default=100)
-
+    parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     args = parser.parse_args()
 
     with open(args.cfg) as f:
@@ -111,8 +111,8 @@ if __name__ == '__main__':
     val_data = get_val_data(dataset_cfg)
     dataloader = DataLoader(val_data, shuffle=True, batch_size=test_cfg['BATCH_SIZE'],     worker_init_fn=seed_worker, generator=g)
 
-    console.print(f"Model > [yellow]{cfg['MODEL']['NAME']} {cfg['MODEL']['BACKBONE']}[/yellow]")
-    console.print(f"Dataset > [yellow]{cfg['DATASET']['NAME']}[/yellow]")
+    console.print(f"Model > [yellow1]{cfg['MODEL']['NAME']} {cfg['MODEL']['BACKBONE']}[/yellow1]")
+    console.print(f"Dataset > [yellow1]{cfg['DATASET']['NAME']}[/yellow1]")
 
     save_dir = Path(cfg['SAVE_DIR']) / 'test_results'
     save_dir.mkdir(exist_ok=True)
@@ -130,14 +130,18 @@ if __name__ == '__main__':
         delta1 = pgd(model, img, lbl, epsilon=args.eps, alpha=1e2, num_iter=args.n_iter) # Various values of epsilon, alpha can be used to play with.
         model.eval()
         tensorr = (img.float() + delta1.float())
-        save_dict = {'images': tensorr, 'labels': lbl}
-        torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_{str(cfg['MODEL']['BACKBONE'])}.pt")
+
+
         exit()
         ypa1 = model(tensorr, lbl)
         gc.collect()
         ypa_c = model(img.float(), lbl)
         metrics.update(ypa1.softmax(dim=1), lbl)
         metrics_clean.update(ypa_c.softmax(dim=1), lbl)
+
+        if args.store_data:
+            preds.append(tensorr.detach().cpu())
+            lblss.append(lbl.detach().cpu())
 
         if iterr == 20:
             break
@@ -148,4 +152,9 @@ if __name__ == '__main__':
         f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\t")
         f.write(f"Clean mIoU {miou_c}\t")
 
-    console.rule(f"[cyan]Segmentation results are saved in `{save_dir}`")
+    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR'] + "/test_results/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt"}")
+
+    if args.store_data:
+        save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
+        torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
+        console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt"}")
