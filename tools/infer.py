@@ -119,8 +119,8 @@ if __name__ == '__main__':
 
     preds = []
     lblss = []
-    metrics = Metrics(150, -1, 'cuda')
-    metrics_clean = Metrics(150, -1, 'cuda')
+    metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
+    metrics_clean = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
 
     for iterr, (img, lbl, _) in enumerate(dataloader):
         model.train()
