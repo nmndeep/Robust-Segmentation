@@ -17,11 +17,11 @@ from torch.utils.data import DataLoader
 import torchvision
 
 @torch.no_grad()
-def evaluate(model, dataloader, device):
+def evaluate(model, dataloader, device, cls):
     print('Evaluating...')
     # model.freeze_bn()
     model.eval()
-    metrics = Metrics(150, -1, device)
+    metrics = Metrics(cls, -1, device)
 
     for i, (images, labels, _) in enumerate(dataloader):
         images = images.to(device)

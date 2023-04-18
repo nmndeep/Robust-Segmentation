@@ -150,8 +150,10 @@ class Trainer:
         # pbar = tqdm(enumerate(self.trainloader), total=self.iters_per_epoch, desc=f"Epoch: [{epoch+1}/{self.epochs}] Iter: [{0}/{self.iters_per_epoch}] LR: {lr:.8f} Loss: {train_loss:.8f}")
         train_loss = 0.0 
         best_mIoU = 0.0
+        best_macc = 0.0
         for iterr, (img, lbl, _) in enumerate(self.train_loader):
-
+            if iterr == 0 and self.gpu==0:
+                print(lbl.min(), lbl.max())
             self.optimizer.zero_grad(set_to_none=True)
             # for optim in self.optimizer:
             #     optim.zero_grad(set_to_none=True)
@@ -191,7 +193,10 @@ class Trainer:
 
             if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*5) == 0:
                 # print("yup")
-                miou = evaluate(model, self.val_loader, self.gpu)[-1]
+                eval__stats = evaluate(model, self.val_loader, self.gpu, self.dataset_cfg['N_CLS'])
+                miou = eval__stats[-1]
+                macc = eval__stats[1]
+
                 # self.writer.add_scalar('val/mIoU', miou, iterr//self.iters_per_epoch)
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
                 model.train()
@@ -199,7 +204,10 @@ class Trainer:
                 if miou > best_mIoU:
                     best_mIoU = miou
                     torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + "/best_model_ckpt.pth")
+                if macc > best_macc:
+                    best_macc = macc
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
+                print(f"Current mAcc: {macc} Best mIoU: {best_macc}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1
@@ -211,6 +219,8 @@ class Trainer:
 
         table = [
             ['Best mIoU', f"{best_mIoU:.2f}"],
+            ['Best mAcc', f"{best_macc:.2f}"],
+
             ['Total Training Time', time.strftime("%H:%M:%S", end)]
         ]
         if self.gpu == 0:
