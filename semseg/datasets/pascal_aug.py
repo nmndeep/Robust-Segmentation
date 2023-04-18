@@ -50,7 +50,7 @@ class VOCAugSegmentation(SegmentationDataset):
             _split_f = os.path.join(_voc_root, 'val.txt')
         else:
             raise RuntimeError('Unknown dataset split: {}'.format(split))
-
+        self.n_cls = 21
         self.images = []
         self.masks = []
         with open(os.path.join(_split_f), "r") as lines:
