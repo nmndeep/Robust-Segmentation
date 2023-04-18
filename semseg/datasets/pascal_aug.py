@@ -81,7 +81,7 @@ class VOCAugSegmentation(SegmentationDataset):
         return img, target, os.path.basename(self.images[index])
 
     def _mask_transform(self, mask):
-        return torch.LongTensor(np.array(mask).astype('int32'))
+        return torch.LongTensor(np.array(mask).astype('int32') - 1)
 
     def _load_mat(self, filename):
         mat = sio.loadmat(filename, mat_dtype=True, squeeze_me=True, struct_as_record=False)

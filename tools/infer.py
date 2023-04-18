@@ -126,11 +126,12 @@ if __name__ == '__main__':
         model.train()
         img = img.to('cuda')
         lbl = lbl.to('cuda')
+        print(lbl.min(), lbl.max())
 
         delta1 = pgd(model, img, lbl, epsilon=args.eps, alpha=1e2, num_iter=args.n_iter) # Various values of epsilon, alpha can be used to play with.
         model.eval()
         tensorr = (img.float() + delta1.float())
-
+        print(delta1[0,0][lbl[0]==-1])
 
         exit()
         ypa1 = model(tensorr, lbl)
@@ -152,9 +153,9 @@ if __name__ == '__main__':
         f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\t")
         f.write(f"Clean mIoU {miou_c}\t")
 
-    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR'] + "/test_results/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt"}")
+    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt")
 
     if args.store_data:
         save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
         torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
-        console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt"}")
+        console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
