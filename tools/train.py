@@ -22,11 +22,13 @@ from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
-from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
+from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
 from val import evaluate
 # from mmcv.utils import Config
 # from mmcv.runner import get_dist_info
 from semseg.datasets.dataset_wrappers import *
+
+from tools.val import Pgd_Attack, clean_accuracy
 
 
 
@@ -41,6 +43,7 @@ class Trainer:
         self.loss_cfg, self.optim_cfg, self.sched_cfg = cfg['LOSS'], cfg['OPTIMIZER'], cfg['SCHEDULER']
         self.epochs, self.lr = self.train_cfg['EPOCHS'], self.optim_cfg['LR']
         self.bs = self.train_cfg['BATCH_SIZE']
+        self.adversarial_train = self.train_cfg['ADVERSARIAL']
 
         self.world_size = torch.cuda.device_count()
         if self.train_cfg['DDP']:
@@ -51,6 +54,7 @@ class Trainer:
 
         # self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'])
         self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
+        # self.model = normalize_model(self.model)
         self.model = self.model.to(self.gpu)
 
 
@@ -59,7 +63,7 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'])
+            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'])
             makedir(self.save_path)
             makedir(self.save_path +"/results")
 
@@ -74,7 +78,7 @@ class Trainer:
 
         self.init_optim_log()
 
-        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu]) #, find_unused_parameters=True)
+        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu], find_unused_parameters=True)
 
 
     
@@ -109,7 +113,6 @@ class Trainer:
         
         input_transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
         ])
         # dataset and dataloader
         data_kwargs = {'transform': input_transform, 'base_size': self.train_cfg['BASE_SIZE'], 'crop_size': self.train_cfg['IMAGE_SIZE']}
@@ -151,6 +154,10 @@ class Trainer:
         train_loss = 0.0 
         best_mIoU = 0.0
         best_macc = 0.0
+
+        if self.adversarial_train:
+            attack = Pgd_Attack()
+
         for iterr, (img, lbl, _) in enumerate(self.train_loader):
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
@@ -162,7 +169,10 @@ class Trainer:
             lbl = lbl.cuda(self.gpu, non_blocking=True)
 
             with autocast(enabled=self.train_cfg['AMP']):
-                loss, logits = model(pixel_values=img, labels=lbl)
+                if self.adversarial_train:
+                    img = attack.adv_attack(model, img, lbl)
+                    model.train()
+                loss, logits = model(img, lbl)
                 # logits = torch.nn.functional.log_softmax(logits, dim=1)
                 # loss = self.loss_fn(logits, lbl)
 
@@ -206,7 +216,7 @@ class Trainer:
                     best_macc = macc
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
                 print(f"Current mAcc: {macc} Best mIoU: {best_macc}")
-                print(f"Current aAcc: {eval__stats[2]} class-Acc: {eval__stats[0]}")
+                print(f"Current aAcc: {eval__stats[2]}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1

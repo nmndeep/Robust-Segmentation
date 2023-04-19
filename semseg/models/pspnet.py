@@ -82,13 +82,13 @@ class PSPNet(nn.Module):
                 nn.Conv2d(256, classes, kernel_size=1)
             )
 
-    def forward(self, pixel_values, labels=None):
-        x_size = pixel_values.size()
+    def forward(self, input, lbl=None):
+        x_size = input.size()
         assert (x_size[2]-1) % 8 == 0 and (x_size[3]-1) % 8 == 0
         h = int((x_size[2] - 1) / 8 * self.zoom_factor + 1)
         w = int((x_size[3] - 1) / 8 * self.zoom_factor + 1)
 
-        x = self.layer0(pixel_values)
+        x = self.layer0(input)
         x = self.layer1(x)
         x = self.layer2(x)
         x_tmp = self.layer3(x)
@@ -103,8 +103,8 @@ class PSPNet(nn.Module):
             aux = self.aux(x_tmp)
             if self.zoom_factor != 1:
                 aux = F.interpolate(aux, size=(h, w), mode='bilinear', align_corners=True)
-            main_loss = self.criterion(x, labels)
-            aux_loss = self.criterion(aux, labels)
+            main_loss = self.criterion(x, lbl)
+            aux_loss = self.criterion(aux, lbl)
             loss = main_loss + 0.4 * aux_loss
             return loss, x
         else:

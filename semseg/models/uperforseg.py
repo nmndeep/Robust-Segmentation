@@ -392,43 +392,29 @@ class UperNetForSemanticSegmentation(nn.Module):
     
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = False,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+        input: Optional[torch.Tensor] = None,
+        lbl: Optional[torch.Tensor] = None):
  
 
         return_dict = False
-        #return_dict if return_dict is not None else self.config.use_return_dict
-        # output_hidden_states = (
-        #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        # )
-        # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        # outputs = self.backbone.forward_with_filtered_kwargs(
-        #     pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        # )
-        # features = outputs.feature_maps
-        features = self.backbone(pixel_values)
+        features = self.backbone(input)
 
         logits = self.decode_head(features)
-        logits = nn.functional.interpolate(logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False)
-
-        auxiliary_logits = None
-        if self.auxiliary_head is not None:
-            auxiliary_logits = self.auxiliary_head(features)
-            auxiliary_logits = nn.functional.interpolate(
-                auxiliary_logits, size=pixel_values.shape[2:], mode="bilinear", align_corners=False
-            )
-
+        logits = nn.functional.interpolate(logits, size=input.shape[2:], mode="bilinear", align_corners=False)
+        
         loss = None
-        if labels is not None:
+        if lbl is not None:
+            auxiliary_logits = None
+            if self.auxiliary_head is not None:
+                auxiliary_logits = self.auxiliary_head(features)
+                auxiliary_logits = nn.functional.interpolate(
+                    auxiliary_logits, size=input.shape[2:], mode="bilinear", align_corners=False)
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            main_loss = loss_fct(logits, labels)
-            auxiliary_loss = loss_fct(auxiliary_logits, labels)
+            auxiliary_loss = loss_fct(auxiliary_logits, lbl)
+            main_loss = loss_fct(logits, lbl)
             loss = main_loss + 0.4 * auxiliary_loss
+
         if self.training:
             return loss, logits
         else:

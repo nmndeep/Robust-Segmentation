@@ -9,5 +9,5 @@
 - update config file in `configs` as required. Currently only useing `ConvNext-T`
 - `run_train.sh` runs on A100 vms, and `runner.sh` on SLURM.
 - `train.py` has the main training script.
-- `infer.py` does evaluation, `adversarial` flag makes evaluation of a PGD or just the clean model.
+- `infer.py` does evaluation on standard 1.4k images of PASCALVOC `adversarial` flag makes evaluation of a PGD or just the clean model.
 - `seg_map.py` creates images of the image-GT-output-map. 
