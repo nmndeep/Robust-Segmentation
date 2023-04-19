@@ -1,6 +1,6 @@
 <h3>Some code for semantic segmentation.</h3>
 
-- Currently tested for UperNet with ConvNext backbone for ADE20K dataset.
+- Tested for `UperNet` with `ConvNext` backbone and `PSPNet-RN50` backbone  for `ADE20K` dataset and `PASCALVOC`.
 - UperNet code taken from Huggingface transformers UperNetforSegmentation.
 - ConvNext code taken from the official repo.
 - Aux_head loss seems to be very important in training these models.
