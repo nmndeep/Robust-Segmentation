@@ -30,10 +30,10 @@ def evaluate(model, dataloader, device, cls):
         metrics.update(preds.softmax(dim=1), labels)
     
     ious, miou = metrics.compute_iou()
-    acc, macc = metrics.compute_pixel_acc()
+    cla_acc, macc, aacc = metrics.compute_pixel_acc()
     f1, mf1 = metrics.compute_f1()
     
-    return acc, macc, f1, mf1, ious, miou
+    return acc, macc, aacc, f1, mf1, ious, miou
 
 
 def pgd(model, X, y, epsilon, alpha, num_iter): # Untargetted Attack

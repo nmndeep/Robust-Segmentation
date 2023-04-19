@@ -97,6 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('--eps', type=float, default=4./255.)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
+    parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=True)
+
     args = parser.parse_args()
 
     with open(args.cfg) as f:
@@ -109,7 +111,7 @@ if __name__ == '__main__':
     model = model.to('cuda')
 
     val_data = get_val_data(dataset_cfg)
-    dataloader = DataLoader(val_data, shuffle=True, batch_size=test_cfg['BATCH_SIZE'],     worker_init_fn=seed_worker, generator=g)
+    dataloader = DataLoader(val_data, shuffle=True, batch_size=test_cfg['BATCH_SIZE'], worker_init_fn=seed_worker, generator=g)
 
     console.print(f"Model > [yellow1]{cfg['MODEL']['NAME']} {cfg['MODEL']['BACKBONE']}[/yellow1]")
     console.print(f"Dataset > [yellow1]{cfg['DATASET']['NAME']}[/yellow1]")
@@ -120,42 +122,48 @@ if __name__ == '__main__':
     preds = []
     lblss = []
     metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
-    metrics_clean = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
+    # metrics_clean = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
+
+    if args.adversarial:
+        strr = 'adversarial'
+    else:
+        strr = 'clean'
 
     for iterr, (img, lbl, _) in enumerate(dataloader):
-        model.train()
         img = img.to('cuda')
         lbl = lbl.to('cuda')
-        print(lbl.min(), lbl.max())
-
-        delta1 = pgd(model, img, lbl, epsilon=args.eps, alpha=1e2, num_iter=args.n_iter) # Various values of epsilon, alpha can be used to play with.
-        model.eval()
-        tensorr = (img.float() + delta1.float())
-        print(delta1[0,0][lbl[0]==-1])
-
-        exit()
-        ypa1 = model(tensorr, lbl)
-        gc.collect()
-        ypa_c = model(img.float(), lbl)
-        metrics.update(ypa1.softmax(dim=1), lbl)
-        metrics_clean.update(ypa_c.softmax(dim=1), lbl)
+        # print(lbl.min(), lbl.max())
+        if args.adversarial:
+            model.train()
+            delta1 = pgd(model, img, lbl, epsilon=args.eps, alpha=1e2, num_iter=args.n_iter) # Various values of epsilon, alpha can be used to play with.
+            model.eval()
+            tensorr = (img.float() + delta1.float())
+            print(delta1[0,0][lbl[0]==-1])
+            ypa1 = model(tensorr, lbl)
+            metrics.update(ypa1.softmax(dim=1), lbl)
+        else:
+            model.eval()
+            ypa_c = model(img.float(), lbl)
+            metrics.update(ypa_c.softmax(dim=1), lbl)
 
         if args.store_data:
             preds.append(tensorr.detach().cpu())
             lblss.append(lbl.detach().cpu())
 
-        if iterr == 20:
+        if args.adversarial and iterr == 20:
             break
-    ious, miou = metrics.compute_iou()
-    _, miou_c = metrics_clean.compute_iou()
-    print(miou)
-    with open(cfg['SAVE_DIR'] + "/test_results/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt", 'a+') as f:
-        f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\t")
-        f.write(f"Clean mIoU {miou_c}\t")
 
-    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"pgd_numbers_{dataset_cfg['NAME']}.txt")
+    iuo_c, miou_c = metrics.compute_iou()
+    cla_acc, macc, aacc = metrics.compute_pixel_acc()
+
+    with open(cfg['SAVE_DIR'] + "/test_results/"+ f"{strr}_numbers_{dataset_cfg['NAME']}.txt", 'a+') as f:
+        f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
+        f.write(f"Clean mIoU {miou_c} \n class IoU {iuo_c}\n")
+        f.write(f"Class acc {cla_acc} \n mAcc {macc}, aAcc {aacc}\t")
+        f.write("\n")
+    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"{strr}_numbers_{dataset_cfg['NAME']}.txt")
 
     if args.store_data:
         save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
         torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
-        console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
+        console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_iter_{args.n_iter}_{str(cfg['MODEL']['BACKBONE'])}.pt")

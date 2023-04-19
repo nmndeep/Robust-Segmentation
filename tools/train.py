@@ -195,8 +195,6 @@ class Trainer:
                 # print("yup")
                 eval__stats = evaluate(model, self.val_loader, self.gpu, self.dataset_cfg['N_CLS'])
                 miou = eval__stats[-1]
-                macc = eval__stats[1]
-
                 # self.writer.add_scalar('val/mIoU', miou, iterr//self.iters_per_epoch)
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
                 model.train()
@@ -208,6 +206,7 @@ class Trainer:
                     best_macc = macc
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
                 print(f"Current mAcc: {macc} Best mIoU: {best_macc}")
+                print(f"Current aAcc: {eval__stats[2]} class-Acc: {eval__stats[0]}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1

@@ -8,7 +8,7 @@ MODEL:
   PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/resnet50_v2.pth'              # backbone model's weight 
 
 DATASET:
-  NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  NAME          : pascalvoc                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
   ROOT          : '/data/naman_deep_singh/datasets/pascal_voc'                         # dataset root path
   IGNORE_LABEL  : -1
   N_CLS         : 21
@@ -40,10 +40,10 @@ SCHEDULER:
   
 
 EVAL:
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/PSPNet_ResNet-50_2023-04-16-11_44_57_CLEAN_RN50_MOD/best_model_ckpt.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/PSPNet_ResNet-50_2023-04-18-15_44_08_CLEAN_RN50_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
-  BATCH_SIZE    : 16                                            # evaluation image size in (h, w)                       
+  BATCH_SIZE    : 32                                            # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  

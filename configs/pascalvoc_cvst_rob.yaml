@@ -40,10 +40,10 @@ SCHEDULER:
   
 
 EVAL:
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_2023-04-15-20_55_04_ROBUST_CVST_MOD/best_model_ckpt.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_2023-04-18-15_16_15_ROBUST_CVST_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
-  BATCH_SIZE    : 16                                                                       # evaluation image size in (h, w)                       
+  BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
