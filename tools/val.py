@@ -38,13 +38,14 @@ def evaluate(model, dataloader, device, cls):
 
 def pgd(model, X, y, epsilon, alpha, num_iter): # Untargetted Attack
     
-    delta = torch.zeros_like(X, requires_grad=True)
+    delta = torch.zeros_like(X).uniform_(-epsilon, epsilon)
+    delta.requires_grad = True
     trg = y.squeeze(1)
     
     for t in range(num_iter):
         loss = nn.CrossEntropyLoss(ignore_index = -1)(model(X + delta, y)[1], trg.long())
         loss.backward()
-        delta.data = (delta + X.shape[0]*alpha*delta.grad.data).clamp(-epsilon,epsilon)
+        delta.data = (delta + X.shape[0]*alpha*delta.grad.sign()).clamp(-epsilon,epsilon)
         delta.grad.zero_()
     print('Loss after iteration {}: {:.2f}'.format(t+1, loss.item()))
     return delta.detach()
