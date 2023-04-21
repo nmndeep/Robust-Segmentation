@@ -51,6 +51,8 @@ def segpgd_loss(pred, target, lam):
 
 
 
+
+
 def cospgd_loss(pred, target):
 
     sigm_pred = torch.sigmoid(pred)
@@ -63,6 +65,37 @@ def cospgd_loss(pred, target):
     loss = (w * loss).view(sh[0], -1).mean(-1).mean()
     # print(loss)
     return loss
+
+
+def attack_pgd_training(model, X, y, eps, alpha, opt, half_prec, attack_iters, rs=True, early_stopping=False):
+    delta = torch.zeros_like(X).cuda()
+    if rs:
+        delta.uniform_(-eps, eps)
+
+    delta.requires_grad = True
+    for _ in range(attack_iters):
+        output = model(     (X + delta, 0, 1))
+        loss = F.cross_entropy(output, y)
+        if half_prec:
+            with amp.scale_loss(loss, opt) as scaled_loss:
+                scaled_loss.backward()
+                delta.grad.mul_(loss.item() / scaled_loss.item())
+        else:
+            loss.backward()
+        grad = delta.grad.detach()
+
+        if early_stopping:
+            idx_update = output.max(1)[1] == y
+        else:
+            idx_update = torch.ones(y.shape, dtype=torch.bool)
+        grad_sign = sign(grad)
+        delta.data[idx_update] = (delta + alpha * grad_sign)[idx_update]
+        delta.data = clamp(X + delta.data, 0, 1) - X
+        delta.data = clamp(delta.data, -eps, eps)
+        delta.grad.zero_()
+
+    return delta.detach()
+
 
 
 
@@ -82,25 +115,25 @@ class Pgd_Attack():
         
         model.eval()
 
-        delta = torch.zeros_like(X).uniform_(-self.epsilon, self.epsilon)
+        delta = torch.zeros_like(X).cuda()
         delta.requires_grad = True
         trg = y.squeeze(1)
 
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
-            logits = model(input=(X + delta))
+            logits = model(input=(X + delta).clamp(0., 1.))
             loss = self.loss_fn(logits, trg.long())
-            # else:
-            #     loss = loss_fn(model(X + delta, y)[1], trg.long(), lam_t)
             loss.backward()
-            delta.data = (delta + X.shape[0]*self.alpha*delta.grad.sign()).clamp(-self.epsilon,self.epsilon)
+            grad = delta.grad.detach()
+            grad_sign = torch.sign(grad)
+            delta.data = (delta + self.alpha * grad_sign)
+            delta.data = (X + delta.data).clamp(0., 1.) - X
+            delta.data = delta.data.clamp(-self.epsilon, self.epsilon)
             delta.grad.zero_()
-            delta.detach_()
-            loss.detach_()
-        # print('Loss after iteration {}: {:.2f}'.format(t+1, loss.item()))
+            delta.detach()
 
         x_adv = (X + delta).clamp(0., 1.)
-        return x_adv.detach()
+        return x_adv.detach(), _, _, _
 
 
 def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):

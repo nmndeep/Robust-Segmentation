@@ -36,15 +36,17 @@ def group_weight(model, idx = 0):
     # if idx == 0:
     # modules= [model.backbone, model.decode_head, model.auxiliary_head]
     # for j in model:
+    num_req_grad = 0
     for name, param in model.named_parameters():
         if not param.requires_grad:
+            num_req_grad+=1
             continue
         if param.ndim <= 1 or "norm" in name: #or name in no_weight_decay_list
             group_no_decay.append(param)
             # group_no_decay.append(name.bias)
         else:
             group_decay.append(param)
-    assert len(list(model.parameters())) == len(group_decay) + len(group_no_decay)
+    assert len(list(model.parameters())) - num_req_grad == len(group_decay) + len(group_no_decay)
     # module = model.decode_head
     # # else:
     # paramss = 0
