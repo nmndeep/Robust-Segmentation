@@ -17,10 +17,12 @@ DATASET:
 TRAIN:
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
-  BATCH_SIZE    : 32                 # batch size used to train
+  BATCH_SIZE    : 36                 # batch size used to train
   EPOCHS        : 50             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
+  ATTACK        : apgd
+  FREEZE        : true
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
 
@@ -41,8 +43,8 @@ SCHEDULER:
   
 
 EVAL:
-  NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_2023-04-18-15_16_15_ROBUST_CVST_MOD/best_model_ckpt.pth'  # trained model file path
+  NAME          : pascalvoc                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-04-20-21_59_00_ROBUST_CVST_MOD_frozen_back_5iter/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
   BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       

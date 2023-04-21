@@ -1,112 +1,123 @@
-"""Pascal VOC Semantic Segmentation Dataset."""
 import os
-import torch
+import os.path
+import cv2
 import numpy as np
 
-from PIL import Image
-from .dataset_wrappers import SegmentationDataset
+from torch.utils.data import Dataset
 
 
-class VOCSegmentation(SegmentationDataset):
-    """Pascal VOC Semantic Segmentation Dataset.
+IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm']
 
-    Parameters
-    ----------
-    root : string
-        Path to VOCdevkit folder. Default is './datasets/VOCdevkit'
-    split: string
-        'train', 'val' or 'test'
-    transform : callable, optional
-        A function that transforms the image
-    Examples
-    --------
-    >>> from torchvision import transforms
-    >>> import torch.utils.data as data
-    >>> # Transforms for Normalization
-    >>> input_transform = transforms.Compose([
-    >>>     transforms.ToTensor(),
-    >>>     transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
-    >>> ])
-    >>> # Create Dataset
-    >>> trainset = VOCSegmentation(split='train', transform=input_transform)
-    >>> # Create Training Loader
-    >>> train_data = data.DataLoader(
-    >>>     trainset, 4, shuffle=True,
-    >>>     num_workers=4)
+
+def is_image_file(filename):
+    filename_lower = filename.lower()
+    return any(filename_lower.endswith(extension) for extension in IMG_EXTENSIONS)
+
+
+def make_dataset(split='train', data_root=None, data_list=None):
+    assert split in ['train', 'val', 'test']
+    if not os.path.isfile(data_list):
+        raise (RuntimeError("Image list file do not exist: " + data_list + "\n"))
+    image_label_list = []
+    list_read = open(data_list).readlines()
+    print("Totally {} samples in {} set.".format(len(list_read), split))
+    print("Starting Checking image&label pair {} list...".format(split))
+    for line in list_read:
+        line = line.strip()
+        line_split = line.split(' ')
+        if split == 'test':
+            if len(line_split) != 1:
+                raise (RuntimeError("Image list file read line error : " + line + "\n"))
+            image_name = os.path.join(data_root, line_split[0])
+            label_name = image_name  # just set place holder for label_name, not for use
+        else:
+            if len(line_split) != 2:
+                raise (RuntimeError("Image list file read line error : " + line + "\n"))
+            image_name = os.path.join(data_root, line_split[0])
+            label_name = os.path.join(data_root, line_split[1])
+        '''
+        following check costs some time
+        if is_image_file(image_name) and is_image_file(label_name) and os.path.isfile(image_name) and os.path.isfile(label_name):
+            item = (image_name, label_name)
+            image_label_list.append(item)
+        else:
+            raise (RuntimeError("Image list file line error : " + line + "\n"))
+        '''
+        item = (image_name, label_name)
+        image_label_list.append(item)
+    print("Checking image&label pair {} list done!".format(split))
+    return image_label_list
+
+
+def get_pascal_labels():
+    """From https://github.com/meetps/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py.
+
+    Load the mapping that associates pascal classes with label colors
+    Returns:
+        np.ndarray with dimensions (21, 3)
     """
-    BASE_DIR = 'VOC2012'
-    NUM_CLASS = 21
+    return np.asarray(
+        [
+            [0, 0, 0],
+            [128, 0, 0],
+            [0, 128, 0],
+            [128, 128, 0],
+            [0, 0, 128],
+            [128, 0, 128],
+            [0, 128, 128],
+            [128, 128, 128],
+            [64, 0, 0],
+            [192, 0, 0],
+            [64, 128, 0],
+            [192, 128, 0],
+            [64, 0, 128],
+            [192, 0, 128],
+            [64, 128, 128],
+            [192, 128, 128],
+            [0, 64, 0],
+            [128, 64, 0],
+            [0, 192, 0],
+            [128, 192, 0],
+            [0, 64, 128],
+        ]
+    )
 
-    def __init__(self, root='../datasets/voc', split='train', mode=None, transform=None, **kwargs):
-        super(VOCSegmentation, self).__init__(root, split, mode, transform, **kwargs)
-        _voc_root = os.path.join(root, self.BASE_DIR)
-        _mask_dir = os.path.join(_voc_root, 'SegmentationClass')
-        _image_dir = os.path.join(_voc_root, 'JPEGImages')
-        # train/val/test splits are pre-cut
-        _splits_dir = os.path.join(_voc_root, 'ImageSets/Segmentation')
-        if split == 'train':
-            _split_f = os.path.join(_splits_dir, 'train.txt')
-        elif split == 'val':
-            _split_f = os.path.join(_splits_dir, 'val.txt')
-        elif split == 'test':
-            _split_f = os.path.join(_splits_dir, 'test.txt')
-        else:
-            raise RuntimeError('Unknown dataset split.')
 
-        self.images = []
-        self.masks = []
-        with open(os.path.join(_split_f), "r") as lines:
-            for line in lines:
-                _image = os.path.join(_image_dir, line.rstrip('\n') + ".jpg")
-                assert os.path.isfile(_image)
-                self.images.append(_image)
-                if split != 'test':
-                    _mask = os.path.join(_mask_dir, line.rstrip('\n') + ".png")
-                    assert os.path.isfile(_mask)
-                    self.masks.append(_mask)
+def preprocess_target(mask):
+    """From https://github.com/meetps/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py."""
 
-        if split != 'test':
-            assert (len(self.images) == len(self.masks))
-        print('Found {} images in the folder {}'.format(len(self.images), _voc_root))
+    mask = mask.astype(int)
+    label_mask = np.zeros(mask.shape[:-1], dtype=np.int16)
+    for ii, label in enumerate(get_pascal_labels()):
+        label_mask[np.where(np.all(mask == label, axis=-1))[:3]] = ii
+    label_mask = label_mask.astype(int)
+    return label_mask
 
-    def __getitem__(self, index):
-        img = Image.open(self.images[index]).convert('RGB')
-        if self.mode == 'test':
-            img = self._img_transform(img)
-            if self.transform is not None:
-                img = self.transform(img)
-            return img, os.path.basename(self.images[index])
-        mask = Image.open(self.masks[index])
-        # synchronized transform
-        if self.mode == 'train':
-            img, mask = self._sync_transform(img, mask)
-        elif self.mode == 'val':
-            img, mask = self._val_sync_transform(img, mask)
-        else:
-            assert self.mode == 'testval'
-            img, mask = self._img_transform(img), self._mask_transform(mask)
-        # general resize, normalize and toTensor
-        if self.transform is not None:
-            img = self.transform(img)
 
-        return img, mask, os.path.basename(self.images[index])
+class VOCSegmentation(Dataset):
+    def __init__(self, split='train', data_root=None, data_list=None, transform=None):
+        self.split = split
+        self.BASE_DIR = 'VOCdevkit/VOC2012/'
+        data_root = os.path.join(data_root, self.BASE_DIR)
+        # _splits_dir = os.path.join(data_root, data_list)
+        self.data_list = make_dataset(split, data_root, data_list)
+        self.transform = transform
 
     def __len__(self):
-        return len(self.images)
+        return len(self.data_list)
 
-    def _mask_transform(self, mask):
-        target = np.array(mask).astype('int32')
-        target[target == 255] = -1
-        return torch.from_numpy(target).long()
+    def __getitem__(self, index):
+        image_path, label_path = self.data_list[index]
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)  # BGR 3 channel ndarray wiht shape H * W * 3
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # convert cv2 read image from BGR order to RGB order
+        image = np.float32(image)
+        #label = cv2.imread(label_path, cv2.IMREAD_GRAYSCALE)  # GRAY 1 channel ndarray with shape H * W
+        label = cv2.imread(label_path, cv2.IMREAD_COLOR)
 
-    @property
-    def classes(self):
-        """Category names."""
-        return ('background', 'airplane', 'bicycle', 'bird', 'boat', 'bottle',
-                'bus', 'car', 'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
-                'motorcycle', 'person', 'potted-plant', 'sheep', 'sofa', 'train',
-                'tv')
-
-
-if __name__ == '__main__':
-    dataset = VOCSegmentation()
+        label = cv2.cvtColor(label, cv2.COLOR_BGR2RGB)
+        label = preprocess_target(label)
+        if image.shape[0] != label.shape[0] or image.shape[1] != label.shape[1]:
+            raise (RuntimeError("Image & label shape mismatch: " + image_path + " " + label_path + "\n"))
+        if self.transform is not None:
+            image, label = self.transform(image, label)
+        return image, label
