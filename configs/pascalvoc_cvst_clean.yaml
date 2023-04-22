@@ -6,7 +6,7 @@ ADDENDUM        : 'CLEAN_CVST_MOD'
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
   BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/linf_rob/convnext_tiny_cvst_clean.pt'              # backbone model's weight 
+  PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/convnext_tiny_cvst_clean.pt'              # backbone model's weight 
 
 DATASET:
   NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
@@ -14,16 +14,16 @@ DATASET:
   IGNORE_LABEL  : -1
   N_CLS         : 21
   SEED          : 0
-  
-TRAIN:
+
+TRAIN:  
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
-  BATCH_SIZE    : 32                 # batch size used to train
+  BATCH_SIZE    : 36                 # batch size used to train
   EPOCHS        : 50             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
-  ADVERSARIAL   : true
-  
-
+  ADVERSARIAL   : false
+  ATTACK        : apgd
+  FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
 
@@ -45,7 +45,7 @@ SCHEDULER:
 
 EVAL:
   NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_2023-04-18-15_16_32_ROBUST_CVST_MOD/best_model_ckpt.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-22-12_47_20_CLEAN_CVST_MOD_FREEZE_False_apgd/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
   BATCH_SIZE    : 16                                                                       # evaluation image size in (h, w)                       

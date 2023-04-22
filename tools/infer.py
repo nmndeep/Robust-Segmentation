@@ -140,7 +140,7 @@ def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
             break
 
     print(f'mAcc={m_acc:.2%} aAcc={acc / n_ex:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
-    return m_acc, acc, m_iou
+    return m_acc, acc / n_ex, m_iou
     #print(acc_cls / n_pxl_cls)
     #print(acc_cls.sum() / n_pxl_cls.sum())
 
@@ -174,17 +174,23 @@ def get_val_data(dataset_cfg, test_cfg):
     mean = [0.485, 0.456, 0.406]
     mean = [item * value_scale for item in mean]
 
-    # data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': [473, 473]}
 
-    val_transform = transform.Compose([
-        transform.Crop([473, 473], crop_type='center', padding=mean, ignore_label=0),
-        transform.ToTensor(),
-        transform.Normalize(mean=[0, 0, 0], std=[255, 255, 255])  # To have images in [0, 1].
+    
+    if test_cfg['NAME'] == 'pascalvoc':
+        val_transform = transform.Compose([
+            transform.Crop([473, 473], crop_type='center', padding=mean, ignore_label=0),
+            transform.ToTensor(),
+            transform.Normalize(mean=[0, 0, 0], std=[255, 255, 255])  # To have images in [0, 1].
+            ])
+        data_l = '/data/naman_deep_singh/sem_seg/assests/pascalvoc_val.txt'
+
+        val_dataset = get_segmentation_dataset(test_cfg['NAME'], split='val', data_root=dataset_cfg['ROOT'], data_list=data_l, transform=val_transform)
+    else:
+        input_transform = transforms.Compose([
+        transforms.ToTensor()
         ])
-    data_l = '/data/naman_deep_singh/sem_seg/assests/pascalvoc_val.txt'
-
-    val_dataset = get_segmentation_dataset(test_cfg['NAME'], split='val', data_root=dataset_cfg['ROOT'], data_list=data_l, transform=val_transform)
-    # val_dataset = get_segmentation_dataset(test_cfg['NAME'], root=dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
+        data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': [473, 473]}
+        val_dataset = get_segmentation_dataset(test_cfg['NAME'], root=dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
 
     return val_dataset
 
@@ -202,7 +208,7 @@ if __name__ == '__main__':
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=False)
-    parser.add_argument('--attack', type=str, default='apgd', help='pgd, cospgd or segpgd?')
+    parser.add_argument('--attack', type=str, default='cospgd-loss', help='cospgd-loss, ce-avg or mask-ce-avg?')
 
     args = parser.parse_args()
 
@@ -231,7 +237,7 @@ if __name__ == '__main__':
     lblss = []
     metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
 
-    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=5, n_cls=dataset_cfg['N_CLS'])
+    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=20, n_cls=dataset_cfg['N_CLS'])
     
     if args.adversarial:
         strr = f'adversarial_{args.attack}'
@@ -239,7 +245,7 @@ if __name__ == '__main__':
         strr = 'clean'
 
     if args.adversarial:
-        n_batches = 5
+        n_batches = 10
         # norm = 'Linf'
         args.norm = 'Linf'
 
@@ -268,11 +274,12 @@ if __name__ == '__main__':
     with open(cfg['SAVE_DIR'] + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt", 'a+') as f:
 
         f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
-        f.write(f"Clean mIoU: {miou:.3f} \t mAcc: {macc:.3f}\t aAcc: {aacc:.3f}\n")
+        f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
+        f.write(f"Clean mIoU: {miou:.2%} \t mAcc: {macc:.2%}\t aAcc: {aacc:.2%}\n")
 
         if args.adversarial:
             f.write(f"Attack: APGD {args.attack} \t Linf radius: {args.eps:.4f} \t Iterations: {args.n_iter}\n")    
-            f.write(f"Adversarial mIoU: {adv_miou:.3f} \t mAcc: {adv_macc:.3f}\t aAcc: {adv_aacc:.3f}\n")
+            f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
         f.write("\n")
     console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt")
 
