@@ -68,7 +68,7 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'] + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + str(self.train_cfg['ATTACK']))
+            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'] + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']))
             makedir(self.save_path)
             makedir(self.save_path +"/results")
 
@@ -196,10 +196,11 @@ class Trainer:
                 logger=None
                 )
 
-        for iterr, (img, lbl, _) in enumerate(self.train_loader):
+        for iterr, (img, lbl) in enumerate(self.train_loader):
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
-                self.logger.log("PGD-5 iter 4/255 training, Backbone frozen")
+                if self.adversarial_train:
+                    self.logger.log("APGD-5 iter 4/255 training")
             self.optimizer.zero_grad(set_to_none=True)
             # for optim in self.optimizer:
             #     optim.zero_grad(set_to_none=True)

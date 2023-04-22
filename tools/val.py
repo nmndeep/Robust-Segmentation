@@ -24,7 +24,7 @@ def evaluate(model, dataloader, device, cls):
     model.eval()
     metrics = Metrics(cls, -1, device)
 
-    for i, (images, labels, _) in enumerate(dataloader):
+    for i, (images, labels) in enumerate(dataloader):
         images = images.to(device)
         labels = labels.to(device)
         preds = model(input=images, lbl=labels)
