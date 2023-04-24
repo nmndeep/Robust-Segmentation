@@ -237,7 +237,7 @@ if __name__ == '__main__':
     lblss = []
     metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
 
-    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=20, n_cls=dataset_cfg['N_CLS'])
+    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
     
     if args.adversarial:
         strr = f'adversarial_{args.attack}'
@@ -245,7 +245,7 @@ if __name__ == '__main__':
         strr = 'clean'
 
     if args.adversarial:
-        n_batches = 10
+        n_batches = -1
         # norm = 'Linf'
         args.norm = 'Linf'
 
