@@ -30,7 +30,7 @@ from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
 
 from tools.val import Pgd_Attack, clean_accuracy
-
+dist.init_process_group(backend="nccl")
 
 class Trainer:
 
@@ -56,7 +56,7 @@ class Trainer:
         self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
         # self.model = normalize_model(self.model)
         # self.model.backbone.requires_grad = False
-        if self.train_cfg['FREEZE']:
+        if bool(self.train_cfg['FREEZE']):
             self.freeze_some_layers()
 
         self.attack = self.train_cfg['ATTACK']
@@ -68,9 +68,9 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/standard_logs/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'] + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']))
+            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'] + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']))
             makedir(self.save_path)
-            makedir(self.save_path +"/results")
+            # makedir(self.save_path +"/results")
 
             self.logger = Logger(self.save_path + "/train_log")
 
@@ -186,7 +186,7 @@ class Trainer:
                 attack_fn = partial(
                 attacker.apgd_train,
                 norm='Linf',
-                eps=4./255.,
+                eps=self.train_cfg['EPS']/255.,
                 n_iter=5,
                 use_rs=True,
                 loss='ce-avg',
@@ -200,7 +200,7 @@ class Trainer:
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
                 if self.adversarial_train:
-                    self.logger.log("APGD-5 iter 4/255 training")
+                    self.logger.log(f"APGD-5 iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
             self.optimizer.zero_grad(set_to_none=True)
             # for optim in self.optimizer:
             #     optim.zero_grad(set_to_none=True)
