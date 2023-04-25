@@ -55,11 +55,11 @@ class ADE20KSegmentation(SegmentationDataset):
 
     def __getitem__(self, index):
         img = Image.open(self.images[index]).convert('RGB')
-        if self.mode == 'test':
-            img = self._img_transform(img)
-            if self.transform is not None:
-                img = self.transform(img)
-            return img, os.path.basename(self.images[index])
+        # if self.mode == 'test':
+        #     img = self._img_transform(img)
+        #     if self.transform is not None:
+        #         img = self.transform(img)
+        #     return img, os.path.basename(self.images[index])
         mask = Image.open(self.masks[index])
         # synchrosized transform
         if self.mode == 'train':
@@ -72,7 +72,7 @@ class ADE20KSegmentation(SegmentationDataset):
         # general resize, normalize and to Tensor
         if self.transform is not None:
             img = self.transform(img)
-        return img, mask, os.path.basename(self.images[index])
+        return img, mask #, os.path.basename(self.images[index])
 
     def _mask_transform(self, mask):
         return torch.LongTensor(np.array(mask).astype('int32') - 1)
@@ -172,11 +172,6 @@ def _get_ade20k_pairs(folder, mode='train'):
                 print('cannot find the mask:', maskpath)
 
     return img_paths, mask_paths
-
-
-
-
-
 
 
 if __name__ == '__main__':

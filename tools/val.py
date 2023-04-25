@@ -117,12 +117,13 @@ class Pgd_Attack():
 
         delta = torch.zeros_like(X).cuda()
         delta.requires_grad = True
-        trg = y.squeeze(1)
-
+        # trg = y.squeeze(1)
+        print(y.min(), y.max())
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
             logits = model(input=(X + delta).clamp(0., 1.))
-            loss = self.loss_fn(logits, trg.long())
+            print(t)
+            loss = self.loss_fn(logits, y.long())
             loss.backward()
             grad = delta.grad.detach()
             grad_sign = torch.sign(grad)
@@ -133,7 +134,7 @@ class Pgd_Attack():
             delta.detach()
 
         x_adv = (X + delta).clamp(0., 1.)
-        return x_adv.detach(), _, _, _
+        return x_adv.detach(), None, None, None
 
 
 def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):

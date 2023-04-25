@@ -30,7 +30,8 @@ from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
 
 from tools.val import Pgd_Attack, clean_accuracy
-dist.init_process_group(backend="nccl")
+# torch.backends.cudnn.benchmark=False
+torch.backends.cudnn.deterministic=True
 
 class Trainer:
 
@@ -85,7 +86,6 @@ class Trainer:
 
         self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu], find_unused_parameters=True)
 
-    
 
     def freeze_some_layers(self, early=True):
 
@@ -106,7 +106,7 @@ class Trainer:
 
 
 
-    def setup_distributed(self, address='localhost', port='12354', world_size=6):
+    def setup_distributed(self, address='localhost', port='12355', world_size=6):
         os.environ['MASTER_ADDR'] = address
         os.environ['MASTER_PORT'] = port
 
@@ -135,7 +135,7 @@ class Trainer:
 
         
         input_transform = transforms.Compose([
-            transforms.ToTensor(),
+            transforms.ToTensor()
         ])
         # dataset and dataloader
         data_kwargs = {'transform': input_transform, 'base_size': self.train_cfg['BASE_SIZE'], 'crop_size': self.train_cfg['IMAGE_SIZE']}
@@ -168,7 +168,7 @@ class Trainer:
     def main(self):
 
         model = self.model
-
+        print("Someting not wrong till here")
         # for epoch in range(self.epochs):
         time1 = time.time()
         model.train()
@@ -193,10 +193,18 @@ class Trainer:
                 is_train=False,
                 verbose=False,
                 track_loss=None,    
-                logger=None
+                logger=None, gpuu=self.gpu
                 )
 
         for iterr, (img, lbl) in enumerate(self.train_loader):
+                # assert  == 0
+                print(lbl.min(), lbl.max()) 
+        exit()
+        # i,l =next(iter(self.train_loader))
+        # print(i.size(), l.size())
+        for iterr, (img, lbl) in enumerate(self.train_loader):
+            torch.cuda.empty_cache()
+            print("we are in the train-loop")
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
                 if self.adversarial_train:
