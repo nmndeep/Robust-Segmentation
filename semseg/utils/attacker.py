@@ -151,8 +151,7 @@ criterion_dict = {
     'dlr': dlr_loss,
     'dlr-targeted': dlr_loss_targeted,
     'ce-avg': lambda x, y: F.cross_entropy(
-        x, y, reduction='none').view(x.shape[0], -1).mean(-1),
-    #'dlr-avg': lambda x, y: dlr_loss(x, y).view(x.shape[0], -1).mean(-1),
+        x, y, reduction='none', ignore_index=-1).view(x.shape[0], -1).mean(-1),
     'cospgd-loss': cospgd_loss,
     'mask-ce-avg': masked_cross_entropy,
     'mask-margin-avg': masked_margin_loss,
@@ -169,9 +168,9 @@ def check_oscillation(x, j, k, y5, k3=0.75):
 
 def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     verbose=False, is_train=False, early_stop=False, track_loss=None,
-    logger=None):
+    logger=None, gpuu=0):
     assert not model.training
-    device = x.device
+    device = gpuu
     ndims = len(x.shape) - 1
     bs = x.shape[0]
     n_pxl = x.shape[-2] * x.shape[-1]
@@ -226,6 +225,8 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     #for _ in range(self.eot_iter)
     #with torch.enable_grad()
     logits = model(x_adv)
+    # print(logits.size())
+    # print(y.min(). y.max())
     loss_indiv = criterion_indiv(logits, y)
     loss = loss_indiv.sum()
     #grad += torch.autograd.grad(loss, [x_adv])[0].detach()

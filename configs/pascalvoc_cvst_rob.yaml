@@ -20,7 +20,7 @@ TRAIN:
   BATCH_SIZE    : 36                 # batch size used to train
   EPOCHS        : 20             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
-  ADVERSARIAL   : true
+  ADVERSARIAL   : false
   ATTACK        : apgd
   EPS           : 4
   FREEZE        : false

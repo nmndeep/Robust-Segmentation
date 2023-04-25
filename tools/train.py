@@ -196,15 +196,15 @@ class Trainer:
                 logger=None, gpuu=self.gpu
                 )
 
-        for iterr, (img, lbl) in enumerate(self.train_loader):
-                # assert  == 0
-                print(lbl.min(), lbl.max()) 
-        exit()
+        # for iterr, (img, lbl) in enumerate(self.train_loader):
+        #         # assert  == 0
+        #         print(lbl.min(), lbl.max()) 
+        # exit()
         # i,l =next(iter(self.train_loader))
         # print(i.size(), l.size())
         for iterr, (img, lbl) in enumerate(self.train_loader):
-            torch.cuda.empty_cache()
-            print("we are in the train-loop")
+            # torch.cuda.empty_cache()
+            # print("we are in the train-loop")
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
                 if self.adversarial_train:

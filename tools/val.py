@@ -27,7 +27,7 @@ def evaluate(model, dataloader, device, cls):
     for i, (images, labels) in enumerate(dataloader):
         images = images.to(device)
         labels = labels.to(device)
-        preds = model(input=images, lbl=labels)
+        preds = model(input=images)
         metrics.update(preds.softmax(dim=1), labels)
     
     ious, miou = metrics.compute_iou()
