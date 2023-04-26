@@ -457,7 +457,7 @@ def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
     # old version
     #x_best[~acc] = x_adv[~acc].clone()
     
-    return x_adv, _, acc
+    return x_adv, _, acc, None
 
 
 def pgd_filters(model, x, y, n_iter=10, alpha=.2, loss='ce',

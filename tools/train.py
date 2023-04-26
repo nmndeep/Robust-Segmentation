@@ -69,7 +69,7 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' +str(cfg['ADDENDUM'] + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']))
+            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']) +str(cfg['ADDENDUM'])
             makedir(self.save_path)
             # makedir(self.save_path +"/results")
 
@@ -146,7 +146,7 @@ class Trainer:
         val_dataset = get_segmentation_dataset(self.dataset_cfg['NAME'], root=self.dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
         self.iters_per_epoch = len(train_dataset) // (self.world_size * self.bs)
         self.max_iters = self.epochs * self.iters_per_epoch
-        workers = 4
+        workers = 6
 
         self.train_sampler = make_data_sampler(train_dataset, shuffle=True, distributed=self.train_cfg['DDP'])
         train_batch_sampler = make_batch_data_sampler(self.train_sampler, self.bs, self.max_iters)
@@ -180,14 +180,14 @@ class Trainer:
 
         if self.adversarial_train:
             if self.attack == 'pgd':
-                attack = Pgd_Attack(num_iter=5)
+                attack = Pgd_Attack(num_iter=self.train_cfg['N_ITERS'], epsilon=self.train_cfg['EPS']/255., alpha=1e-2)
                 attack_fn = partial(attack.adv_attack)
             else:
                 attack_fn = partial(
                 attacker.apgd_train,
                 norm='Linf',
                 eps=self.train_cfg['EPS']/255.,
-                n_iter=5,
+                n_iter=self.train_cfg['N_ITERS'],
                 use_rs=True,
                 loss='ce-avg',
                 is_train=False,
@@ -208,7 +208,7 @@ class Trainer:
             if iterr == 0 and self.gpu==0:
                 print(lbl.min(), lbl.max())
                 if self.adversarial_train:
-                    self.logger.log(f"APGD-5 iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
+                    self.logger.log(f"{self.attack}-{self.train_cfg['N_ITERS']} iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
             self.optimizer.zero_grad(set_to_none=True)
             # for optim in self.optimizer:
             #     optim.zero_grad(set_to_none=True)

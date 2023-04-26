@@ -98,7 +98,6 @@ def attack_pgd_training(model, X, y, eps, alpha, opt, half_prec, attack_iters, r
 
 
 
-
 losses = {'pgd': lambda x, y: F.cross_entropy(x, y), 'cospgd':
 cospgd_loss, 'segpgd': segpgd_loss}
 

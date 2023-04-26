@@ -75,7 +75,7 @@ class ADE20KSegmentation(SegmentationDataset):
         return img, mask #, os.path.basename(self.images[index])
 
     def _mask_transform(self, mask):
-        return torch.LongTensor(np.array(mask).astype('int32') - 1)
+        return torch.LongTensor(np.array(mask).astype('int32'))
 
     def __len__(self):
         return len(self.images)

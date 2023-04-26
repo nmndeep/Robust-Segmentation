@@ -30,7 +30,7 @@ from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
-from val import evaluate
+from val import evaluate, Pgd_Attack
 import semseg.utils.attacker as attacker
 import semseg.datasets.transform_util as transform
 from semseg.metrics import Metrics
@@ -156,9 +156,10 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
         input = input.cuda()
         target = target.cuda()
 
-        x_adv, _, acc = attack_fn(model, input.clone(), target)
+        x_adv, _, acc, _ = attack_fn(model, input.clone(), target)
         check_imgs(input, x_adv, norm=args.norm)
-        print(f'batch={i} avg. pixel acc={acc.mean():.2%}')
+        if False:
+            print(f'batch={i} avg. pixel acc={acc.mean():.2%}')
 
         adv_loader.append((x_adv.cpu(), target.cpu().clone()))
         if i + 1 == n_batches:
@@ -237,7 +238,7 @@ if __name__ == '__main__':
     lblss = []
     metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
 
-    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
+    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=10, n_cls=dataset_cfg['N_CLS'])
     
     if args.adversarial:
         strr = f'adversarial_{args.attack}'
@@ -251,6 +252,8 @@ if __name__ == '__main__':
 
         if args.norm == 'Linf' and args.eps >= 1.:
             args.eps /= 255.
+        attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=args.n_iter, los='pgd')
+
         attack_fn = partial(
             attacker.apgd_restarts,
             norm=args.norm,
@@ -262,7 +265,7 @@ if __name__ == '__main__':
             verbose=True,
             track_loss='ce-avg',    
             log_path=None,
-            )
+            ) if args.attack != 'pgd' else partial(attack_pgd.adv_attack)
 
         adv_loader = evaluate(dataloader, model, attack_fn, n_batches, args)
     
@@ -273,6 +276,7 @@ if __name__ == '__main__':
    
     with open(cfg['SAVE_DIR'] + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt", 'a+') as f:
 
+        f.write(f"TESTING FOR -1 BATCHES - {test_cfg['NAME']}\n")
         f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
         f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
         f.write(f"Clean mIoU: {miou:.2%} \t mAcc: {macc:.2%}\t aAcc: {aacc:.2%}\n")
