@@ -69,7 +69,7 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}_' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK']) +str(cfg['ADDENDUM'])
+            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK'])+ '_' +str(cfg['ADDENDUM'])
             makedir(self.save_path)
             # makedir(self.save_path +"/results")
 
@@ -146,7 +146,7 @@ class Trainer:
         val_dataset = get_segmentation_dataset(self.dataset_cfg['NAME'], root=self.dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
         self.iters_per_epoch = len(train_dataset) // (self.world_size * self.bs)
         self.max_iters = self.epochs * self.iters_per_epoch
-        workers = 6
+        workers = 4
 
         self.train_sampler = make_data_sampler(train_dataset, shuffle=True, distributed=self.train_cfg['DDP'])
         train_batch_sampler = make_batch_data_sampler(self.train_sampler, self.bs, self.max_iters)
@@ -250,12 +250,13 @@ class Trainer:
                     iterr, self.max_iters, self.optimizer.param_groups[0]['lr'], train_loss / (iterr+1),
                     str(datetime.timedelta(seconds=int(time.time() - time1))), eta_string))
 
-            if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*5) == 0:
-                # print("yup")
-                eval__stats = evaluate(model, self.val_loader, self.gpu, self.dataset_cfg['N_CLS'])
+            eval_freq = 5 if (iterr+1) *(self.iters_per_epoch) <=  self.epochs - 20 else 2
+            
+            if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*eval_freq) == 0:
+
+                eval__stats = evaluate(model, self.val_loader, self.gpu, self.dataset_cfg['N_CLS'], n_batches=20)
                 miou = eval__stats[-1]
                 macc = eval__stats[1]
-                # self.writer.add_scalar('val/mIoU', miou, iterr//self.iters_per_epoch)
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
                 model.train()
 

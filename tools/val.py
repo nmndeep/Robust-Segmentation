@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 import torchvision
 
 @torch.no_grad()
-def evaluate(model, dataloader, device, cls):
+def evaluate(model, dataloader, device, cls, n_batches=-1):
     print('Evaluating...')
     # model.freeze_bn()
     model.eval()
@@ -29,7 +29,8 @@ def evaluate(model, dataloader, device, cls):
         labels = labels.to(device)
         preds = model(input=images)
         metrics.update(preds.softmax(dim=1), labels)
-    
+        if i + 1 == n_batches:
+            break
     ious, miou = metrics.compute_iou()
     cla_acc, macc, aacc = metrics.compute_pixel_acc()
     f1, mf1 = metrics.compute_f1()
@@ -133,7 +134,7 @@ class Pgd_Attack():
             delta.detach()
 
         x_adv = (X + delta).clamp(0., 1.)
-        return x_adv.detach(), None, None, None
+        return x_adv.detach(), None, None
 
 
 def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
