@@ -3,9 +3,50 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 import random
+from functools import partial
 
 #from autopgd_base import L1_projection
 from autoattack.other_utils import L1_norm, L2_norm, L0_norm, Logger
+
+
+def compute_iou_acc(pred, target, n_cls, verbose=False):
+
+    acc = 0
+    acc_cls = torch.zeros(n_cls)
+    n_ex = 0
+    n_pxl_cls = torch.zeros(n_cls)
+    int_cls = torch.zeros(n_cls)
+    union_cls = torch.zeros(n_cls)
+    acc_curr = pred == target
+
+    # Compute correctly classified pixels for each class.
+    for cl in range(n_cls):
+        ind = target == cl
+        acc_cls[cl] += acc_curr[ind].float().sum()
+        n_pxl_cls[cl] += ind.float().sum()
+    ind = n_pxl_cls > 0
+    m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
+
+    # Compute overall correctly classified pixels.
+    a_acc = acc_curr.float().mean()
+
+    # Compute intersection and union.
+    intersection_all = pred == target
+    for cl in range(n_cls):
+        ind = target == cl
+        int_cls[cl] += intersection_all[ind].float().sum()
+        union_cls[cl] += (ind.float().sum() + (pred == cl).float().sum()
+                          - intersection_all[ind].float().sum())
+    ind = union_cls > 0
+    m_iou = (int_cls[ind] / union_cls[ind]).mean()
+
+    if verbose:
+        print(
+            f'mAcc={m_acc:.2%} aAcc={a_acc:.2%}', f' mIoU={m_iou:.2%}')
+
+    return m_acc, a_acc, m_iou
+
+
 
 
 def L1_projection(x2, y2, eps1):
@@ -94,7 +135,7 @@ def dlr_loss_targeted(x, y, y_target):
         x_sorted[:, -3] + x_sorted[:, -4]) + 1e-12)
 
 
-def cospgd_loss(pred, target):
+def cospgd_loss(pred, target, reduction='mean'):
     """Implementation of the loss for semantic segmentation from
     https://arxiv.org/abs/2302.02213.
 
@@ -107,9 +148,14 @@ def cospgd_loss(pred, target):
     n_cls = pred.shape[1]
     y = F.one_hot(target.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
-    w = (sigm_pred * y).sum(1) / pred.norm(p=2, dim=1)
+    w = (sigm_pred * y).sum(1) / torch.max(sigm_pred.norm(p=2, dim=1)*y.norm(p=2, dim=1), 1e-8) #sigm_pred.max(dim=1)[0] #pred.norm(p=2, dim=1)
     loss = F.cross_entropy(pred, target, reduction='none')
-    loss = (w * loss).view(sh[0], -1).mean(-1)
+    
+    with torch.no_grad():
+        loss = w * loss
+
+    if reduction == 'mean':
+        return loss.view(sh[0], -1).mean(-1)
 
     return loss
 
@@ -124,6 +170,58 @@ def masked_cross_entropy(pred, target):
     return loss
 
 
+def quantile_loss(pred, target, q=1., loss_fn='ce'):
+
+    if isinstance(loss_fn, str):
+        loss_fn = criterion_dict[loss_fn]
+    if isinstance(q, str):
+        if q == 'adapt':
+            pass
+    loss = loss_fn(pred, target)
+    corrcl = pred.max(1)[1] == target
+    qs = torch.quantile(loss.view(pred.shape[0], -1), q, dim=-1)
+    mask = (loss < qs.view(-1, 1, 1)).detach() + corrcl.detach()
+
+    return mask.float() * loss
+
+
+def subset_loss(pred, target, k=0., loss_fn='ce'):
+
+    if isinstance(loss_fn, str):
+        loss_fn = criterion_dict[loss_fn]
+    n_pxl = target.shape[-2] * target.shape[-1]
+
+    loss = loss_fn(pred, target)
+    corrcl = pred.max(1)[1] == target
+    n_corrcl = corrcl.long().sum(dim=(1, 2))
+    n_to_use = n_corrcl * (1 + k)
+    n_to_use.clamp_(0, n_pxl - 1)
+    sorted_loss = loss.detach().view(pred.shape[0], -1).sort(-1)[0]
+    u = torch.arange(pred.shape[0])
+    thr = sorted_loss[u, n_to_use.long()].view(pred.shape[0], 1, 1)
+    to_use = corrcl + (loss <= thr)
+
+    return to_use.float() * loss
+
+
+def cls_balanced_loss(pred, target, loss_fn='ce'):
+
+    if isinstance(loss_fn, str):
+        loss_fn = criterion_dict[loss_fn]
+    n_pxl = target.shape[-2] * target.shape[-1]
+    n_cls = pred.shape[1]
+
+    loss = loss_fn(pred, target)
+    mask = torch.zeros_like(target, requires_grad=False).float()
+    for cl in range(n_cls):
+        in_class = target == cl
+        count_class = in_class.float().sum(dim=(-2, -1))
+        mask += count_class.view(-1, 1, 1) * in_class.float()
+    mask /= n_pxl
+
+    return (1 - mask) * loss
+
+
 def margin_loss(pred, target):
 
     sh = target.shape
@@ -135,14 +233,135 @@ def margin_loss(pred, target):
 
     return logits_other - logits_target
 
+
 def masked_margin_loss(pred, target):
     """Margin loss of only correctly classified pixels."""
 
+    pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #L2_norm(pred, keepdim=True)
+    #print(pred.max(), pred.mean())
     mask = pred.max(1)[1] == target
     loss = margin_loss(pred, target)
     #mask = loss <= 1e10
-    loss = (mask.float() * loss).view(pred.shape[0], -1).mean(-1)
+    loss = mask.float() * loss #+ (1 - mask.float()) * torch.log(1 + loss)
 
+    return loss.view(pred.shape[0], -1).mean(-1)
+
+
+def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None):
+    """Compute JS divergence between p and q.
+
+    p: logits [bs, n_cls, ...]
+    q: labels [bs]
+    softmax_output: if softmax has already been applied to p
+    reduction: to pass to KL computation
+    red_dim: dimensions over which taking the sum
+    """
+    
+    if not softmax_output:
+        p = F.softmax(p, 1)
+    q = F.one_hot(q.view(q.shape[0], -1), p.shape[1])
+    q = q.permute(0, 2, 1).view(p.shape).float()
+    
+    m = (p + q) / 2
+    
+    loss = (F.kl_div(m.log(), p, reduction=reduction)
+            + F.kl_div(m.log(), q, reduction=reduction)) / 2
+    if red_dim is not None:
+        assert reduction == 'none', 'Incompatible setup.'
+        loss = loss.sum(dim=red_dim)
+    
+    return loss
+
+
+def js_loss(p, q, reduction='mean'):
+
+    loss = js_div_fn(p, q, red_dim=(1)) # Sum over classes.
+    if reduction == 'mean':
+        return loss.view(p.shape[0], -1).mean(-1)
+    elif reduction == 'none':
+        return loss
+
+
+def orthogonal_loss(pred, target, x, loss_fn=None):
+
+    def _project(u, v):
+        sh = u.shape
+        u = u.view(sh[0], -1)
+        v = v.view(sh[0], -1)
+        p = (u * v).sum(-1)
+        p = p / (L2_norm(u) * L2_norm(v))
+        proj_uv = p.unsqueeze_(1) * u / L2_norm(u, keepdim=True)
+        return (u - proj_uv + v).view(sh)
+
+    ind = pred.max(1)[1] == target
+    if isinstance(loss_fn, str):
+        loss_fn = criterion_dict[loss_fn]
+    loss = loss_fn(pred, target)
+    grad_corrcl = torch.autograd.grad(
+        (loss * ind.float()).sum(), [x], retain_graph=True)[0].detach()
+    grad_miscl = torch.autograd.grad(
+        (loss * (1 - ind.float())).sum(), [x])[0].detach()
+    grad = _project(grad_corrcl, grad_miscl)
+
+    return loss.view(x.shape[0], -1).mean(-1), grad
+
+
+def binary_dice_loss(pred, target, valid_mask=None, smooth=1, exponent=2):
+    """Binary dice loss, adapted from
+    https://github.com/open-mmlab/mmsegmentation/blob/b600f7cb26829afa2c785af41755391626fbb446/mmseg/models/losses/dice_loss.py.
+    """
+
+    assert pred.shape[0] == target.shape[0]
+    pred = pred.reshape(pred.shape[0], -1)
+    target = target.reshape(target.shape[0], -1)
+    #valid_mask = valid_mask.reshape(valid_mask.shape[0], -1)
+
+    num = torch.sum(torch.mul(pred, target), dim=1) * 2 #+ smooth
+    den = torch.sum(
+        pred.pow(exponent) + target.pow(exponent), dim=1) + smooth
+
+    return 1 - num / den
+
+
+def dice_loss(pred, target, smooth=1e-10, exponent=2):
+    """Multi-class dice loss, adapted from
+    https://github.com/open-mmlab/mmsegmentation/blob/b600f7cb26829afa2c785af41755391626fbb446/mmseg/models/losses/dice_loss.py.
+    """
+
+    pred = F.softmax(pred, 1)
+    target = F.one_hot(target.view(target.shape[0], -1), pred.shape[1])
+    target = target.permute(0, 2, 1).view(pred.shape).float()
+
+    total_loss = 0
+    num_classes = pred.shape[1]
+    for i in range(num_classes):
+        dice_loss = binary_dice_loss(
+            pred[:, i],
+            target[:, i],
+            #valid_mask=valid_mask,
+            smooth=smooth,
+            exponent=exponent)
+        total_loss += dice_loss
+
+    return total_loss / num_classes
+
+
+def segpgd_loss(pred, target, t, max_t, reduction='none'):
+    """Implementation of the loss of https://arxiv.org/abs/2207.12391.
+
+    pred: B x cls x h x w
+    target: B x h x w
+    t: current iteration
+    max_t: total iterations
+    """
+
+    lmbd = t / 2 * max_t
+    corrcl = (pred.max(1)[1] == target).float()
+    loss = F.cross_entropy(pred, target, reduction='none')
+    loss = (1 - lmbd) * corrcl * loss + lmbd * (1 - corrcl) * loss
+
+    if reduction == 'mean':
+        return loss.view(target.shape[0], -1).mean(-1)
     return loss
 
 
@@ -151,11 +370,32 @@ criterion_dict = {
     'dlr': dlr_loss,
     'dlr-targeted': dlr_loss_targeted,
     'ce-avg': lambda x, y: F.cross_entropy(
-        x, y, reduction='none', ignore_index=-1).view(x.shape[0], -1).mean(-1),
+        x, y, reduction='none').view(x.shape[0], -1).mean(-1),
+    #'dlr-avg': lambda x, y: dlr_loss(x, y).view(x.shape[0], -1).mean(-1),
     'cospgd-loss': cospgd_loss,
+    'cospgd-indiv': partial(cospgd_loss, reduction='none'),
     'mask-ce-avg': masked_cross_entropy,
+    'margin-avg': lambda x, y: margin_loss(x, y).view(x.shape[0], -1).mean(-1),
     'mask-margin-avg': masked_margin_loss,
+    'js-avg': js_loss,
+    'js': partial(js_loss, reduction='none'),
+    'orth-ce-avg': lambda x, y, v: orthogonal_loss(x, y, v, loss_fn='ce'),
+    'dice-loss': lambda x, y: 1. * dice_loss(x, y),
+    'q-ce-avg': lambda x, y: quantile_loss(
+        x, y, q=1, loss_fn='ce').view(x.shape[0], -1).mean(-1),
+    'subset-ce-avg': lambda x, y: subset_loss(
+        x, y, k=.001, loss_fn='ce').view(x.shape[0], -1).mean(-1),
+    'subset-js-avg': lambda x, y: subset_loss(
+        x, y, k=.2, loss_fn='js').view(x.shape[0], -1).mean(-1),
+    'bal-ce-avg': lambda x, y: cls_balanced_loss(
+        x, y, loss_fn='ce').view(x.shape[0], -1).mean(-1),
+    'bal-js-avg': lambda x, y: cls_balanced_loss(
+        x, y, loss_fn='js').view(x.shape[0], -1).mean(-1),
+    'bal-cos-avg': lambda x, y: cls_balanced_loss(
+        x, y, loss_fn='cospgd-indiv').view(x.shape[0], -1).mean(-1),
+    'segpgd-loss': partial(segpgd_loss, reduction='mean'),
     }
+
 
 
 def check_oscillation(x, j, k, y5, k3=0.75):
@@ -166,16 +406,22 @@ def check_oscillation(x, j, k, y5, k3=0.75):
         return (t <= k * k3 * torch.ones_like(t)).float()
 
 
+
 def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     verbose=False, is_train=False, early_stop=False, track_loss=None,
-    logger=None, gpuu=0):
+    logger=None, #n_cls=21
+    ):
     assert not model.training
-    device = gpuu
+    device = x.device
     ndims = len(x.shape) - 1
     bs = x.shape[0]
     n_pxl = x.shape[-2] * x.shape[-1]
+    loss_name = loss
 
-
+    if logger is None:
+        logger = Logger(log_path)
+    #metrics = Metrics(num_classes=n_cls, device=x.device, )
+    
     if not use_rs:
         x_adv = x.clone()
     else:
@@ -225,24 +471,35 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     #for _ in range(self.eot_iter)
     #with torch.enable_grad()
     logits = model(x_adv)
-    # print(logits.size())
-    # print(y.min(). y.max())
-    loss_indiv = criterion_indiv(logits, y)
-    loss = loss_indiv.sum()
-    #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
-    grad = torch.autograd.grad(loss, [x_adv])[0].detach()
-    #grad /= float(self.eot_iter)
+    if loss_name not in ['orth-ce-avg']:
+        if loss_name == 'segpgd-loss':
+            loss_indiv = criterion_indiv(logits, y, 0, n_iter)
+        else:
+            loss_indiv = criterion_indiv(logits, y)
+        loss = loss_indiv.sum()
+        #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
+        grad = torch.autograd.grad(loss, [x_adv])[0].detach()
+        #grad /= float(self.eot_iter)
+        # To potentially use a different loss e.g. no mask.
+        if track_loss == 'segpgd-loss':
+            loss_indiv = track_loss_fn(logits, y, 0, n_iter)
+        else:
+            loss_indiv = track_loss_fn(logits, y)
+        loss = loss_indiv.sum()
+    else:
+        loss_indiv, grad = criterion_indiv(logits, y, x_adv)
+        loss = loss_indiv.sum()
     grad_best = grad.clone()
     x_adv.detach_()
-    # To potentially use a different loss e.g. no mask.
-    loss_indiv = track_loss_fn(logits, y)
-    loss = loss_indiv.sum()
     loss_indiv.detach_()
     loss.detach_()
-    
+
     acc = logits.detach().max(1)[1] == y
     acc = acc.float().view(bs, -1).mean(-1)
     acc_steps[0] = acc + 0
+    pred_best = logits.detach().max(1)[1]  # Track the predictions for best points.
+    n_cls = logits.shape[1]
+    m_acc, a_acc, m_iou = compute_iou_acc(pred_best.cpu(), y.cpu(), n_cls)
     loss_best = loss_indiv.detach().clone()
     loss_best_last_check = loss_best.clone()
     reduced_last_check = torch.ones_like(loss_best)
@@ -260,6 +517,7 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
             loss_curr = loss.detach().mean()
             
             a = 0.75 if i > 0 else 1.0
+            #a = 1.
 
             if norm == 'Linf':
                 x_adv_1 = x_adv + step_size * torch.sign(grad)
@@ -309,18 +567,29 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         #for _ in range(self.eot_iter)
         #with torch.enable_grad()
         logits = model(x_adv)
-        loss_indiv = criterion_indiv(logits, y)
-        loss = loss_indiv.sum()
-        
-        #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
-        if i < n_iter - 1:
-            # save one backward pass
-            grad = torch.autograd.grad(loss, [x_adv])[0].detach()
-        #grad /= float(self.eot_iter)
+        if loss_name not in ['orth-ce-avg']:
+            if loss_name == 'segpgd-loss':
+                loss_indiv = criterion_indiv(logits, y, i + 1, n_iter)
+            else:
+                loss_indiv = criterion_indiv(logits, y)
+            loss = loss_indiv.sum()
+            
+            #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
+            if i < n_iter - 1:
+                # save one backward pass
+                grad = torch.autograd.grad(loss, [x_adv])[0].detach()
+            #grad /= float(self.eot_iter)
+
+            # To potentially use a different loss e.g. no mask.
+            if track_loss == 'segpgd-loss':
+                loss_indiv = track_loss_fn(logits, y, i + 1, n_iter)
+            else:
+                loss_indiv = track_loss_fn(logits, y)
+            loss = loss_indiv.sum()
+        else:
+            loss_indiv, grad = criterion_indiv(logits, y, x_adv)
+            loss = loss_indiv.sum()
         x_adv.detach_()
-        # To potentially use a different loss e.g. no mask.
-        loss_indiv = track_loss_fn(logits, y)
-        loss = loss_indiv.sum()
         loss_indiv.detach_()
         loss.detach_()
         
@@ -331,13 +600,17 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         acc = torch.min(acc, avg_acc)
         acc_steps[i + 1] = acc + 0
         x_best_adv[ind_pred] = x_adv[ind_pred] + 0.
+        pred_best[ind_pred] = logits.detach().max(1)[1][ind_pred] + 0
+        m_acc, a_acc, m_iou = compute_iou_acc(pred_best.cpu(), y.cpu(), n_cls)
 
         if verbose:
             str_stats = ' - step size: {:.5f} - topk: {:.2f}'.format(
                 step_size.mean(), topk.mean() * n_fts) if norm in ['L1'] else ' - step size: {:.5f}'.format(
                 step_size.mean())
-            logger.log('iteration: {} - best loss: {:.6f} curr loss {:.6f} - robust accuracy: {:.2%}{}'.format(
-                i, loss_best.sum(), loss_curr, acc.float().mean(), str_stats))
+            str_perf = f'mAcc={m_acc:.2%} aAcc={a_acc:.2%} mIoU={m_iou:.2%}'
+            logger.log('iteration: {} - best loss: {:.6f} curr loss {:.6f} - {}{}'.format( # robust accuracy: {:.2%}
+                i, loss_best.sum(), loss_curr, #acc.float().mean(),
+                str_perf, str_stats))
             #print('pert {}'.format((x - x_best_adv).abs().view(x.shape[0], -1).sum(-1).max()))
         
         ### check step size
@@ -457,7 +730,7 @@ def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
     # old version
     #x_best[~acc] = x_adv[~acc].clone()
     
-    return x_adv, _, acc, None
+    return x_adv, _, acc
 
 
 def pgd_filters(model, x, y, n_iter=10, alpha=.2, loss='ce',
