@@ -29,57 +29,30 @@ from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
-from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir
+from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
 from val import evaluate, Pgd_Attack
 import semseg.utils.attacker as attacker
 import semseg.datasets.transform_util as transform
 from semseg.metrics import Metrics
-
+import torchvision
 # from mmcv.utils import Config
 # from mmcv.runner import get_dist_info
 from semseg.datasets.dataset_wrappers import *
 console = Console()
 SEED = 225
-
-
-def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
-    numpy.random.seed(SEED)
-    random.seed(SEED)
+random.seed(SEED)
+np.random.seed(SEED)
 
 g = torch.Generator()
 g.manual_seed(SEED)
 
-
-def IoUAcc(y_trg, y_pred, classes = 21):
-
-    trg = y_trg.squeeze(1)
-    pred = y_pred
-    iou_list = list()
-    present_iou_list = list()
-
-    pred = pred.view(-1)
-    trg = trg.view(-1)
-    for sem_class in range(classes): # loop over each class for IoU calculation
-        pred_inds = (pred == sem_class)
-        target_inds = (trg == sem_class)
-        if target_inds.long().sum().item() == 0:
-            iou_now = float('nan')
-            #print('Class {} IoU is {}'.format(class_names[sem_class+1], iou_now))
-        else: 
-            intersection_now = (pred_inds[target_inds]).long().sum().item()
-            union_now = pred_inds.long().sum().item() + target_inds.long().sum().item() - intersection_now
-            iou_now = float(intersection_now) / float(union_now)
-            #print('Class {} IoU is {}'.format(class_names[sem_class+1], iou_now))
-            present_iou_list.append(iou_now)
-        iou_list.append(iou_now)
-        
-    
-    return np.mean(present_iou_list)*100
+IN_MEAN = [0.485, 0.456, 0.406]
+IN_STD = [0.229, 0.224, 0.225]
 
 
-
-def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
+def clean_accuracy(
+    model, data_loder, n_batches=-1, n_cls=21, return_output=True,
+    logger=None):
     """Evaluate accuracy."""
 
     model.eval()
@@ -89,16 +62,21 @@ def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
     n_pxl_cls = torch.zeros(n_cls)
     int_cls = torch.zeros(n_cls)
     union_cls = torch.zeros(n_cls)
+    # if logger is None:
+    #     logger = Logger(None)
+    l_output = []
 
-    metrics = Metrics(n_cls, -1, 'cpu')
+    #metrics = Metrics(n_cls, -1, 'cpu')
 
-    for i, (input, target) in enumerate(data_loder):
+    for i, vals in enumerate(data_loder):
+        input, target = vals[0].clone(), vals[1].clone()
         #print(input[0, 0, 0, :10])
+        print(input[0, 0, 0, :10], input.min(), input.max())
         input = input.cuda()
 
         with torch.no_grad():
             output = model(input)
-
+        l_output.append(output.cpu())
         #metrics.update(output.cpu(), target)
 
         pred = output.cpu().max(1)[1]
@@ -138,11 +116,19 @@ def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
 
         if i + 1 == n_batches:
             break
+    l_output = torch.cat(l_output)
 
-    print(f'mAcc={m_acc:.2%} aAcc={acc / n_ex:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
-    return m_acc, acc / n_ex, m_iou
+    # logger.log(f'mAcc={m_acc:.2%} aAcc={acc / n_ex:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
     #print(acc_cls / n_pxl_cls)
     #print(acc_cls.sum() / n_pxl_cls.sum())
+    stats = {
+        'mAcc': m_acc.item(),
+        'aAcc': (acc / n_ex).item(),
+        'mIoU': m_iou.item()}
+
+    if return_output:
+        return stats, l_output
+
 
 
 def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
@@ -156,7 +142,7 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
         input = input.cuda()
         target = target.cuda()
 
-        x_adv, _, acc, _ = attack_fn(model, input.clone(), target)
+        x_adv, _, acc = attack_fn(model, input.clone(), target)
         check_imgs(input, x_adv, norm=args.norm)
         if False:
             print(f'batch={i} avg. pixel acc={acc.mean():.2%}')
@@ -169,31 +155,36 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
 
 
 
-def get_val_data(dataset_cfg, test_cfg):
 
-    value_scale = 1.
-    mean = [0.485, 0.456, 0.406]
-    mean = [item * value_scale for item in mean]
+def get_data(dataset_cfg, test_cfg):
 
+    if str(test_cfg['NAME']) == 'pascalvoc':
+        data_dir = '../VOCdevkit/'
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=512,
+            crop_size=(473, 473))
 
+    elif str(test_cfg['NAME']) == 'pascalaug':
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=512,
+            crop_size=(473, 473))
     
-    if test_cfg['NAME'] == 'pascalvoc':
-        val_transform = transform.Compose([
-            transform.Crop([473, 473], crop_type='center', padding=mean, ignore_label=0),
-            transform.ToTensor(),
-            transform.Normalize(mean=[0, 0, 0], std=[255, 255, 255])  # To have images in [0, 1].
-            ])
-        data_l = '/data/naman_deep_singh/sem_seg/assests/pascalvoc_val.txt'
-
-        val_dataset = get_segmentation_dataset(test_cfg['NAME'], split='val', data_root=dataset_cfg['ROOT'], data_list=data_l, transform=val_transform)
     else:
-        input_transform = transforms.Compose([
-        transforms.ToTensor()
-        ])
-        data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': [473, 473]}
-        val_dataset = get_segmentation_dataset(test_cfg['NAME'], root=dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
+        raise ValueError(f'Unknown dataset.')
 
-    return val_dataset
+    val_loader = torch.utils.data.DataLoader(
+        val_data, batch_size=test_cfg['BATCH_SIZE'], shuffle=True,
+        num_workers=1, pin_memory=True, sampler=None)
+
+    return val_loader
+
+
 
 # alpha, num_iters
 attack_setting = {'pgd': (0.01, 40), 'segpgd': (0.01, 40),
@@ -209,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=False)
-    parser.add_argument('--attack', type=str, default='cospgd-loss', help='cospgd-loss, ce-avg or mask-ce-avg?')
+    parser.add_argument('--attack', type=str, default='cospgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-margin-avg, js-avg?')
 
     args = parser.parse_args()
 
@@ -220,11 +211,13 @@ if __name__ == '__main__':
 
     model = eval(model_cfg['NAME'])(model_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
     model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
-
+    model_norm = False
+    if model_norm:
+        print('Add normalization layer.')
+        model = normalize_model(model, IN_MEAN, IN_STD)
     model = model.to('cuda')
 
-    val_data = get_val_data(dataset_cfg, test_cfg)
-    dataloader = DataLoader(val_data, shuffle=True, batch_size=test_cfg['BATCH_SIZE'], worker_init_fn=seed_worker, generator=g)
+    val_data_loader = get_data(dataset_cfg, test_cfg)
 
     # clean_accuracy(model, dataloader)
     # exit()
@@ -236,58 +229,58 @@ if __name__ == '__main__':
 
     preds = []
     lblss = []
-    metrics = Metrics(dataset_cfg['N_CLS'], -1, 'cuda')
 
-    macc, aacc, miou = clean_accuracy(model, dataloader, n_batches=10, n_cls=dataset_cfg['N_CLS'])
-    
-    if args.adversarial:
-        strr = f'adversarial_{args.attack}'
-    else:
-        strr = 'clean'
-
-    if args.adversarial:
-        n_batches = -1
-        # norm = 'Linf'
-        args.norm = 'Linf'
-
-        if args.norm == 'Linf' and args.eps >= 1.:
-            args.eps /= 255.
-        attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=args.n_iter, los='pgd')
-
-        attack_fn = partial(
-            attacker.apgd_restarts,
-            norm=args.norm,
-            eps=args.eps,
-            n_iter=args.n_iter,
-            n_restarts=1,
-            use_rs=True,
-            loss=args.attack if args.attack else 'ce-avg',
-            verbose=True,
-            track_loss='ce-avg',    
-            log_path=None,
-            ) if args.attack != 'pgd' else partial(attack_pgd.adv_attack)
-
-        adv_loader = evaluate(dataloader, model, attack_fn, n_batches, args)
-    
-
-    if args.adversarial:
-        adv_macc, adv_aacc, adv_miou = clean_accuracy(model, adv_loader, n_batches)
-
-   
-    with open(cfg['SAVE_DIR'] + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt", 'a+') as f:
-
-        f.write(f"TESTING FOR -1 BATCHES - {test_cfg['NAME']}\n")
-        f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
-        f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
-        f.write(f"Clean mIoU: {miou:.2%} \t mAcc: {macc:.2%}\t aAcc: {aacc:.2%}\n")
+    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
+    for ite, ls in enumerate(['ce-avg', 'cospgd-loss', 'mask-ce-avg', 'js-avg']):
+        args.attack = ls 
+        if args.adversarial:
+            strr = f'adversarial_loss_comparison'
+        else:
+            strr = 'clean'
 
         if args.adversarial:
-            f.write(f"Attack: APGD {args.attack} \t Linf radius: {args.eps:.4f} \t Iterations: {args.n_iter}\n")    
-            f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
-        f.write("\n")
-    console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt")
+            n_batches = -1
+            # norm = 'Linf'
+            args.norm = 'Linf'
 
-    # if args.store_data:
-    #     save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
-    #     torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
-    #     console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_iter_{args.n_iter}_{str(cfg['MODEL']['BACKBONE'])}.pt")
+            if args.norm == 'Linf' and args.eps >= 1.:
+                args.eps /= 255.
+            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=args.n_iter, los='pgd')
+
+            attack_fn = partial(
+                attacker.apgd_restarts,
+                norm=args.norm,
+                eps=args.eps,
+                n_iter=args.n_iter,
+                n_restarts=1,
+                use_rs=True,
+                loss=args.attack if args.attack else 'ce-avg',
+                verbose=True,
+                track_loss='ce-avg',    
+                log_path=None,
+                ) if args.attack != 'pgd' else partial(attack_pgd.adv_attack)
+
+            adv_loader = evaluate(val_data_loader, model, attack_fn, n_batches, args)
+        
+
+        if args.adversarial:
+            adv_stats, l_outs = clean_accuracy(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'])
+            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_{args.attack}_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}.pt" )
+       
+        with open(cfg['SAVE_DIR'] + "/test_results/main_results/"+ f"{strr}_numbers_{args.eps:.4f}_{test_cfg['NAME']}.txt", 'a+') as f:
+            if ite == 0:
+                f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
+                f.write(f"Clean results: {clean_stats}\n")
+                f.write(f"----- Linf radius: {args.eps:.4f} ------")
+                f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
+            if args.adversarial:
+                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {args.n_iter}\n")   
+                f.write(f"Adversarial results: {adv_stats}\n") 
+                # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
+            f.write("\n")
+        console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt")
+
+        # if args.store_data:
+        #     save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
+        #     torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
+        #     console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_iter_{args.n_iter}_{str(cfg['MODEL']['BACKBONE'])}.pt")
