@@ -196,7 +196,7 @@ attack_setting = {'pgd': (0.01, 40), 'segpgd': (0.01, 40),
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
-    parser.add_argument('--eps', type=float, default=8.)
+    parser.add_argument('--eps', type=float, default=12.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=False)
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
     model_norm = False
     if model_norm:
-        print('Add normalization layer.')
+        print('Add normalization layer.')   
         model = normalize_model(model, IN_MEAN, IN_STD)
     model = model.to('cuda')
 
@@ -231,13 +231,13 @@ if __name__ == '__main__':
     lblss = []
 
     clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
-    for ite, ls in enumerate(['ce-avg', 'cospgd-loss', 'mask-ce-avg', 'js-avg']):
-        args.attack = ls 
+    for ite, ls in enumerate([2., 8.]):
+        args.attack = 'mask-norm-corrlog-avg' 
         if args.adversarial:
-            strr = f'adversarial_loss_comparison'
+            strr = f'ACROSS_models'
         else:
             strr = 'clean'
-
+        args.eps = ls
         if args.adversarial:
             n_batches = -1
             # norm = 'Linf'
@@ -251,12 +251,12 @@ if __name__ == '__main__':
                 attacker.apgd_restarts,
                 norm=args.norm,
                 eps=args.eps,
-                n_iter=args.n_iter,
+                n_iter=100,
                 n_restarts=1,
                 use_rs=True,
                 loss=args.attack if args.attack else 'ce-avg',
                 verbose=True,
-                track_loss='ce-avg',    
+                track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',    
                 log_path=None,
                 ) if args.attack != 'pgd' else partial(attack_pgd.adv_attack)
 
@@ -265,7 +265,7 @@ if __name__ == '__main__':
 
         if args.adversarial:
             adv_stats, l_outs = clean_accuracy(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'])
-            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_{args.attack}_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}.pt" )
+            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_{args.attack}_{args.eps:.4f}_n_it_{ls}_{test_cfg['NAME']}.pt" )
        
         with open(cfg['SAVE_DIR'] + "/test_results/main_results/"+ f"{strr}_numbers_{args.eps:.4f}_{test_cfg['NAME']}.txt", 'a+') as f:
             if ite == 0:
@@ -274,7 +274,7 @@ if __name__ == '__main__':
                 f.write(f"----- Linf radius: {args.eps:.4f} ------")
                 f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
             if args.adversarial:
-                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {args.n_iter}\n")   
+                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {ls}\n")   
                 f.write(f"Adversarial results: {adv_stats}\n") 
                 # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
             f.write("\n")

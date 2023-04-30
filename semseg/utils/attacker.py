@@ -143,16 +143,17 @@ def cospgd_loss(pred, target, reduction='mean'):
     target: B x h x w
     """
 
+    #with torch.no_grad():
     sigm_pred = torch.sigmoid(pred)
     sh = target.shape
     n_cls = pred.shape[1]
     y = F.one_hot(target.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
-    w = (sigm_pred * y).sum(1) / torch.max(sigm_pred.norm(p=2, dim=1)*y.norm(p=2, dim=1), 1e-8) #sigm_pred.max(dim=1)[0] #pred.norm(p=2, dim=1)
+    #w = (sigm_pred * y).sum(1) / pred.norm(p=2, dim=1) #sigm_pred.max(dim=1)[0] #pred.norm(p=2, dim=1)
+    w = F.cosine_similarity(sigm_pred, y)
     loss = F.cross_entropy(pred, target, reduction='none')
-    
-    with torch.no_grad():
-        loss = w * loss
+    #with torch.no_grad():
+    loss = w.detach() * loss
 
     if reduction == 'mean':
         return loss.view(sh[0], -1).mean(-1)
@@ -229,7 +230,20 @@ def margin_loss(pred, target):
     y = F.one_hot(target.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
     logits_target = (y * pred).sum(1)
-    logits_other = (pred - 1e10 * y).max(1)[1]
+    logits_other = (pred - 1e10 * y).max(1)[0]
+
+    return logits_other - logits_target
+
+
+def normalized_margin_loss(pred, target):
+
+    pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt()
+    sh = target.shape
+    n_cls = pred.shape[1]
+    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    y = y.permute(0, 2, 1).view(pred.shape)
+    logits_target = (y * pred).sum(1)
+    logits_other = (pred - 1e10 * y).max(1)[0]
 
     return logits_other - logits_target
 
@@ -237,14 +251,56 @@ def margin_loss(pred, target):
 def masked_margin_loss(pred, target):
     """Margin loss of only correctly classified pixels."""
 
-    pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #L2_norm(pred, keepdim=True)
+    pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt().detach() #L2_norm(pred, keepdim=True)
     #print(pred.max(), pred.mean())
-    mask = pred.max(1)[1] == target
+    #mask = pred.max(1)[1] == target
     loss = margin_loss(pred, target)
-    #mask = loss <= 1e10
-    loss = mask.float() * loss #+ (1 - mask.float()) * torch.log(1 + loss)
+    mask = pred.max(1)[1] == target
+    #mask = (loss <= 0).detach()
+    loss = mask.float().detach() * loss #+ (1 - mask.float()) * torch.log(1 + loss)
 
     return loss.view(pred.shape[0], -1).mean(-1)
+
+
+def single_logits_loss(pred, target, normalized=False, reduction='none',
+        masked=False):
+    """The (normalized) logit of the correct class is minimized."""
+
+    if normalized:
+        pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #.detach()
+    sh = target.shape
+    n_cls = pred.shape[1]
+    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    y = y.permute(0, 2, 1).view(pred.shape)
+    loss = -1 * (y * pred).sum(1)
+    if masked:
+        mask = pred.max(1)[1] == target
+        loss = mask.float().detach() * loss
+
+    if reduction == 'mean':
+        return loss.view(sh[0], -1).mean(-1)
+    return loss
+
+
+def targeted_single_logits_loss(
+    pred, labels, target, normalized=False, reduction='none',
+    masked=False):
+    """The (normalized) logit of the target class is maximized."""
+
+    if normalized:
+        pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #.detach()
+    sh = target.shape
+    n_cls = pred.shape[1]
+    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    y = y.permute(0, 2, 1).view(pred.shape)
+    loss = (y * pred).sum(1)
+    if masked:
+        mask = pred.max(1)[1] == labels
+        loss = mask.float().detach() * loss
+
+    if reduction == 'mean':
+        return loss.view(sh[0], -1).mean(-1)
+    return loss
 
 
 def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None):
@@ -355,13 +411,13 @@ def segpgd_loss(pred, target, t, max_t, reduction='none'):
     max_t: total iterations
     """
 
-    lmbd = t / 2 * max_t
+    lmbd = t / 2 / max_t
     corrcl = (pred.max(1)[1] == target).float()
     loss = F.cross_entropy(pred, target, reduction='none')
     loss = (1 - lmbd) * corrcl * loss + lmbd * (1 - corrcl) * loss
 
     if reduction == 'mean':
-        return loss.view(target.shape[0], -1).mean(-1)
+        return loss.view(target.shape[0], - 1).mean(-1)
     return loss
 
 
@@ -377,6 +433,8 @@ criterion_dict = {
     'mask-ce-avg': masked_cross_entropy,
     'margin-avg': lambda x, y: margin_loss(x, y).view(x.shape[0], -1).mean(-1),
     'mask-margin-avg': masked_margin_loss,
+    'norm-margin-avg': lambda x, y: normalized_margin_loss(
+        x, y).view(x.shape[0], -1).mean(-1),
     'js-avg': js_loss,
     'js': partial(js_loss, reduction='none'),
     'orth-ce-avg': lambda x, y, v: orthogonal_loss(x, y, v, loss_fn='ce'),
@@ -394,8 +452,20 @@ criterion_dict = {
     'bal-cos-avg': lambda x, y: cls_balanced_loss(
         x, y, loss_fn='cospgd-indiv').view(x.shape[0], -1).mean(-1),
     'segpgd-loss': partial(segpgd_loss, reduction='mean'),
+    'corrlog-avg': partial(
+        single_logits_loss, normalized=False, reduction='mean'),
+    'norm-corrlog-avg': partial(
+        single_logits_loss, normalized=True, reduction='mean'),
+    'norm-corrlog-avg-targeted': partial(
+        targeted_single_logits_loss, normalized=True, reduction='mean'),
+    'mask-corrlog-avg': partial(
+        single_logits_loss, normalized=False, reduction='mean', masked=True),
+    'mask-norm-corrlog-avg': partial(
+        single_logits_loss, normalized=True, reduction='mean', masked=True),
+    'mask-norm-corrlog-avg-targeted': partial(
+        targeted_single_logits_loss, normalized=True, reduction='mean',
+        masked=True),
     }
-
 
 
 def check_oscillation(x, j, k, y5, k3=0.75):
