@@ -4,8 +4,8 @@ ADDENDUM        : 'ROBUST_CVST_MOD_2_ITER'
 
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
-  BACKBONE      : ConvNeXt-T_CVST_ROB                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/linf_rob/convnext_tiny_cvst_robust.pt'              # backbone model's weight 
+  BACKBONE      : ConvNeXt-S_CVST_ROB                                                  # model variant
+  PRETRAINED    : '/data/naman_deep_singh/model_zoo/linf_rob/convnext_s_cvst_robust.pt'              # backbone model's weight 
 
 DATASET:
   NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
@@ -21,9 +21,9 @@ TRAIN:
   EPOCHS        : 50             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
-  ATTACK        : apgd
+  ATTACK        : pgd
   EPS           : 4
-  N_ITERS       : 5
+  N_ITERS       : 2
   FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
@@ -45,8 +45,9 @@ SCHEDULER:
   
 
 EVAL:
-  NAME          : pascalvoc                                             # dataset name to be trained with (camvid, cityscapes, ade20k)
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_False_2023-04-30-09_16_45_FREEZE_False_apgd_ROBUST_CVST_MOD_2_ITER/best_model_ckpt.pth'  # trained model file path
+  NAME          : pascalvoc   
+  BACKBONE      : ConvNeXt-S_CVST_ROB                                                  # model variant                                          # dataset name to be trained with (camvid, cityscapes, ade20k)
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-S_CVST_ROB_adv_True_2023-05-02-09_43_58_FREEZE_False_pgd_ROBUST_CVST_MOD_2_ITER/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
   BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       

@@ -46,7 +46,7 @@ SCHEDULER:
 
 EVAL:
   NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-  MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-29-09_55_38_FREEZE_False_apgd_CLEAN_CVST/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]        
   BATCH_SIZE    : 32                                                              # evaluation image size in (h, w)                       
@@ -55,3 +55,9 @@ EVAL:
     FLIP        : true                                                                  # use flip in evaluation  
     SCALES      : [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]                                     # scales used in MSF evaluation                
 
+
+# rob - 151 clean: '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_False_2023-04-27-16_53_11__FREEZE_False_apgdROBUST_CVST_MODbets_model_ckpt.pth' - 38.5
+# clean - 151 clean: '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-28-21_45_42_FREEZE_False_apgd_CLEAN_CVST/best_model_ckpt.pth' - 37.1 
+# clean -150 clean : '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-29-09_55_38_FREEZE_False_apgd_CLEAN_CVST/best_model_ckpt.pth' - 42.1
+# rob - 150 clean '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_False_2023-04-29-18_08_58_FREEZE_False_apgd_ROBUST_CVST_MOD/best_model_ckpt.pth' - 41.3
+# rob - 150 adv '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-04-25-23_00_39_ROBUST_CVST_MOD_FREEZE_False_apgd/best_model_ckpt.pth' - 33.8

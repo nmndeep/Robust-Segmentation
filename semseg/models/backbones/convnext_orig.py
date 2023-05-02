@@ -31,7 +31,6 @@ class ConvBlock1(nn.Module):
         return out
 
 
-
 class Block(nn.Module):
     r""" ConvNeXt Block. There are two equivalent implementations:
     (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
@@ -74,7 +73,7 @@ CONVNEXT_SETTINGS = {
     'T': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       # [depths, dims, aux_head_chn, dpr]
     'T_CVST': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],  
     'T_CVST_ROB': [[3, 3, 9, 3], [96, 192, 384, 768], 384, 0.4],       
-    'S': [[3, 3, 27, 3], [96, 192, 384, 768], 384, 0.3],
+    'S_CVST_ROB': [[3, 3, 27, 3], [96, 192, 384, 768], 384, 0.3],
     'B': [[3, 3, 27, 3], [128, 256, 512, 1024], 512, 0.4]
 }
 
@@ -222,7 +221,6 @@ class ConvNeXt(nn.Module):
 
 
 
-
     def forward_features(self, x):
         outs = []
         for i in range(4):
@@ -269,9 +267,6 @@ class LayerNorm(nn.Module):
             x = (x - u) / torch.sqrt(s + self.eps)
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
             return x
-
-
-
 
 
 

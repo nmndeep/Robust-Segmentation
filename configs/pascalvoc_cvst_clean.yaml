@@ -45,7 +45,8 @@ SCHEDULER:
   
 
 EVAL:
-  NAME          : pascalvoc                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  NAME          : pascalvoc   
+  BACKBONE      : ConvNeXt-T_CVST_ROB      
   MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-04-28-12_00_56_FREEZE_False_pgd_CLEAN_CVST_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 

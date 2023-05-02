@@ -155,7 +155,6 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
 
 
 
-
 def get_data(dataset_cfg, test_cfg):
 
     if str(test_cfg['NAME']) == 'pascalvoc':
@@ -174,7 +173,14 @@ def get_data(dataset_cfg, test_cfg):
             transform=torchvision.transforms.ToTensor(),
             base_size=512,
             crop_size=(473, 473))
-    
+
+    elif str(test_cfg['NAME']) == 'ade20k':
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=520,
+            crop_size=(512, 512))
     else:
         raise ValueError(f'Unknown dataset.')
 
@@ -196,11 +202,12 @@ attack_setting = {'pgd': (0.01, 40), 'segpgd': (0.01, 40),
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
-    parser.add_argument('--eps', type=float, default=12.)
+    parser.add_argument('--eps', type=float, default=8.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=False)
-    parser.add_argument('--attack', type=str, default='cospgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-margin-avg, js-avg?')
+    parser.add_argument('--attack', type=str, default='segpgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-norm-corrlog-avg, js-avg?')
+    parser.add_argument('--attack_type', type=str, default='apgd', help='pgd or pgd?')
 
     args = parser.parse_args()
 
@@ -209,7 +216,7 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    model = eval(model_cfg['NAME'])(model_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
+    model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
     model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
     model_norm = False
     if model_norm:
@@ -221,7 +228,7 @@ if __name__ == '__main__':
 
     # clean_accuracy(model, dataloader)
     # exit()
-    console.print(f"Model > [yellow1]{cfg['MODEL']['NAME']} {cfg['MODEL']['BACKBONE']}[/yellow1]")
+    console.print(f"Model > [yellow1]{cfg['MODEL']['NAME']} {test_cfg['BACKBONE']}[/yellow1]")
     console.print(f"Dataset > [yellow1]{test_cfg['NAME']}[/yellow1]")
 
     save_dir = Path(cfg['SAVE_DIR']) / 'test_results'
@@ -231,13 +238,13 @@ if __name__ == '__main__':
     lblss = []
 
     clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
-    for ite, ls in enumerate([2., 8.]):
-        args.attack = 'mask-norm-corrlog-avg' 
+    for ite, ls in enumerate(['js-avg', 'mask-norm-corrlog-avg']):
+        args.attack = ls #'segpgd-loss' 
         if args.adversarial:
-            strr = f'ACROSS_models'
+            strr = f'adversarial_loss_comparison_{args.attack_type}'
         else:
             strr = 'clean'
-        args.eps = ls
+        # args.eps = ls
         if args.adversarial:
             n_batches = -1
             # norm = 'Linf'
@@ -245,36 +252,36 @@ if __name__ == '__main__':
 
             if args.norm == 'Linf' and args.eps >= 1.:
                 args.eps /= 255.
-            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=args.n_iter, los='pgd')
+            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=ls, los=args.attack)
 
             attack_fn = partial(
                 attacker.apgd_restarts,
                 norm=args.norm,
                 eps=args.eps,
-                n_iter=100,
+                n_iter=args.n_iter,
                 n_restarts=1,
                 use_rs=True,
                 loss=args.attack if args.attack else 'ce-avg',
                 verbose=True,
                 track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',    
                 log_path=None,
-                ) if args.attack != 'pgd' else partial(attack_pgd.adv_attack)
+                ) if args.attack_type == 'apgd' else partial(attack_pgd.adv_attack)
 
             adv_loader = evaluate(val_data_loader, model, attack_fn, n_batches, args)
         
 
         if args.adversarial:
             adv_stats, l_outs = clean_accuracy(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'])
-            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_{args.attack}_{args.eps:.4f}_n_it_{ls}_{test_cfg['NAME']}.pt" )
+            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_S_model_{args.attack}_{args.eps:.4f}_n_it_{ls}_{test_cfg['NAME']}.pt" )
        
         with open(cfg['SAVE_DIR'] + "/test_results/main_results/"+ f"{strr}_numbers_{args.eps:.4f}_{test_cfg['NAME']}.txt", 'a+') as f:
             if ite == 0:
-                f.write(f"{cfg['MODEL']['NAME']} - {cfg['MODEL']['BACKBONE']}\n")
+                f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
                 f.write(f"Clean results: {clean_stats}\n")
                 f.write(f"----- Linf radius: {args.eps:.4f} ------")
                 f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
             if args.adversarial:
-                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {ls}\n")   
+                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {args.n_iter} \t alpha: 0.01 \n")   
                 f.write(f"Adversarial results: {adv_stats}\n") 
                 # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
             f.write("\n")
