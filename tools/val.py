@@ -52,19 +52,48 @@ def segpgd_loss(pred, target, lam):
 
 
 
+def cospgd_loss(pred, target, reduction='mean'):
+    """Implementation of the loss for semantic segmentation from
+    https://arxiv.org/abs/2302.02213.
 
+    pred: B x cls x h x w
+    target: B x h x w
+    """
 
-def cospgd_loss(pred, target):
-
+    #with torch.no_grad():
     sigm_pred = torch.sigmoid(pred)
     sh = target.shape
     n_cls = pred.shape[1]
     y = F.one_hot(target.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
-    w = (sigm_pred * y).sum(1) / pred.norm(p=2, dim=1)
+    #w = (sigm_pred * y).sum(1) / pred.norm(p=2, dim=1) #sigm_pred.max(dim=1)[0] #pred.norm(p=2, dim=1)
+    w = F.cosine_similarity(sigm_pred, y)
     loss = F.cross_entropy(pred, target, reduction='none')
-    loss = (w * loss).view(sh[0], -1).mean(-1).mean()
-    # print(loss)
+    #with torch.no_grad():
+    loss = w.detach() * loss
+
+    if reduction == 'mean':
+        return loss.view(sh[0], -1).mean(-1)
+
+    return loss
+
+
+def segpgd_loss(pred, target, t, max_t, reduction='mean'):
+    """Implementation of the loss of https://arxiv.org/abs/2207.12391.
+
+    pred: B x cls x h x w
+    target: B x h x w
+    t: current iteration
+    max_t: total iterations
+    """
+
+    lmbd = t / 2 / max_t
+    corrcl = (pred.max(1)[1] == target).float()
+    loss = F.cross_entropy(pred, target, reduction='none')
+    loss = (1 - lmbd) * corrcl * loss + lmbd * (1 - corrcl) * loss
+
+    if reduction == 'mean':
+        return loss.view(target.shape[0], - 1).mean(-1)
     return loss
 
 
@@ -99,8 +128,8 @@ def attack_pgd_training(model, X, y, eps, alpha, opt, half_prec, attack_iters, r
 
 
 
-losses = {'pgd': lambda x, y: F.cross_entropy(x, y), 'cospgd':
-cospgd_loss, 'segpgd': segpgd_loss}
+losses = {'pgd': lambda x, y: F.cross_entropy(x, y), 'cospgd-loss':
+cospgd_loss, 'segpgd-loss': segpgd_loss}
 
 
 class Pgd_Attack():
@@ -109,6 +138,7 @@ class Pgd_Attack():
         self.epsilon = epsilon
         self.num_iter = num_iter
         self.loss_fn = losses[los]
+        self.los_name = los
         self.alpha = alpha
 
     def adv_attack(self, model, X, y): # Untargetted Attack
@@ -122,8 +152,12 @@ class Pgd_Attack():
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
             logits = model(input=(X + delta).clamp(0., 1.))
-            print(t)
-            loss = self.loss_fn(logits, y.long())
+            # print(t)
+            if self.los_name == 'segpgd-loss':
+                loss = self.loss_fn(logits, y.long(), t, self.num_iter)
+            else:
+                loss = self.loss_fn(logits, y.long())
+            loss = loss.sum()
             loss.backward()
             grad = delta.grad.detach()
             grad_sign = torch.sign(grad)
