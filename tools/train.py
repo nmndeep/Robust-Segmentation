@@ -69,7 +69,7 @@ class Trainer:
       
         
         if self.gpu == 0:
-            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK'])+ '_' +str(cfg['ADDENDUM'])
+            self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK'])+ '_' + str(self.train_cfg['LOSS_FN']) + str(cfg['ADDENDUM'])
             makedir(self.save_path)
             # makedir(self.save_path +"/results")
 
@@ -122,7 +122,7 @@ class Trainer:
 
         self.loss_fn = get_loss(self.loss_cfg['NAME'], self.ignore_label, None)
         # self.loss_fn = torch.nn.NLLLoss(ignore_index=-1)
-        self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'])
+        self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
         # self.optimizer = create_optimizers(model, self.lr, self.optim_cfg['WEIGHT_DECAY'], self.gpu)
         self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
         # self.scheduler2 = get_scheduler(self.sched_cfg['NAME'], self.optimizer[1], self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
@@ -132,7 +132,6 @@ class Trainer:
 
 
     def dataloaders(self):
-
         
         input_transform = transforms.Compose([
             transforms.ToTensor()
@@ -168,7 +167,6 @@ class Trainer:
     def main(self):
 
         model = self.model
-        print("Someting not wrong till here")
         # for epoch in range(self.epochs):
         time1 = time.time()
         model.train()
@@ -180,7 +178,7 @@ class Trainer:
 
         if self.adversarial_train:
             if self.attack == 'pgd':
-                attack = Pgd_Attack(num_iter=self.train_cfg['N_ITERS'], epsilon=self.train_cfg['EPS']/255., alpha=1e-2)
+                attack = Pgd_Attack(num_iter=self.train_cfg['N_ITERS'], epsilon=self.train_cfg['EPS']/255., alpha=1e-2, los=self.train_cfg['LOSS_FN'])
                 attack_fn = partial(attack.adv_attack)
             else:
                 attack_fn = partial(
@@ -205,8 +203,8 @@ class Trainer:
         for iterr, (img, lbl) in enumerate(self.train_loader):
             # torch.cuda.empty_cache()
             # print("we are in the train-loop")
-            if iterr == 0 and self.gpu==0:
-                print(lbl.min(), lbl.max())
+            if iterr <= 5 and self.gpu==0:
+                print(img.min(), img.max())
                 if self.adversarial_train:
                     self.logger.log(f"{self.attack}-{self.train_cfg['N_ITERS']} iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
             self.optimizer.zero_grad(set_to_none=True)
@@ -251,7 +249,7 @@ class Trainer:
                     str(datetime.timedelta(seconds=int(time.time() - time1))), eta_string))
 
             eval_freq = 5 if (iterr+1) *(self.iters_per_epoch) <=  self.epochs - 20 else 2
-            
+
             if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*eval_freq) == 0:
 
                 eval__stats = evaluate(model, self.val_loader, self.gpu, self.dataset_cfg['N_CLS'], n_batches=20)

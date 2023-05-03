@@ -14,13 +14,15 @@ from rich.console import Console
 import numpy as np
 from matplotlib import pyplot as plt
 import cv2
+from collections import OrderedDict
+
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 from tools.val import Pgd_Attack, clean_accuracy
 from PIL import Image, ImageDraw, ImageFont
 import gc
 from autoattack.other_utils import check_imgs
-
+import torch.nn as nn
 from functools import partial
 from semseg.utils.visualize import generate_palette
 from semseg.models import *
@@ -49,10 +51,8 @@ g.manual_seed(SEED)
 IN_MEAN = [0.485, 0.456, 0.406]
 IN_STD = [0.229, 0.224, 0.225]
 
-
 def clean_accuracy(
-    model, data_loder, n_batches=-1, n_cls=21, return_output=True,
-    logger=None):
+    model, data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False):
     """Evaluate accuracy."""
 
     model.eval()
@@ -65,69 +65,79 @@ def clean_accuracy(
     # if logger is None:
     #     logger = Logger(None)
     l_output = []
+    #print('Using {n_cls} classes and ignore')
 
-    #metrics = Metrics(n_cls, -1, 'cpu')
+    metrics = Metrics(n_cls, -1, 'cpu')
 
     for i, vals in enumerate(data_loder):
-        input, target = vals[0].clone(), vals[1].clone()
-        #print(input[0, 0, 0, :10])
-        print(input[0, 0, 0, :10], input.min(), input.max())
-        input = input.cuda()
+        if False:
+            print(i)
+        else:
+            input, target = vals[0], vals[1]
+            #print(input[0, 0, 0, :10])
+            print(input[0, 0, 0, :10], input.min(), input.max(),
+                target.min(), target.max())
+            input = input.cuda()
 
-        with torch.no_grad():
-            output = model(input)
-        l_output.append(output.cpu())
-        #metrics.update(output.cpu(), target)
+            with torch.no_grad():
+                output = model(input)
+            if return_preds:
+                l_output.append(output.cpu())
+            #print('fp done')
+            #metrics.update(output.cpu(), target)
 
-        pred = output.cpu().max(1)[1]
-        acc_curr = pred == target
+            pred = output.max(1)[1].cpu()
+            pred[target == ignore_index] = ignore_index
+            acc_curr = pred == target
+            #print('step 1 done')
 
-        # Compute correctly classified pixels for each class.
-        for cl in range(n_cls):
-            ind = target == cl
-            acc_cls[cl] += acc_curr[ind].float().sum()
-            n_pxl_cls[cl] += ind.float().sum()
-        #print(acc_cls, n_pxl_cls)
-        ind = n_pxl_cls > 0
-        m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
+            # Compute correctly classified pixels for each class.
+            for cl in range(n_cls):
+                ind = target == cl
+                acc_cls[cl] += acc_curr[ind].float().sum()
+                n_pxl_cls[cl] += ind.float().sum()
+            #print(acc_cls, n_pxl_cls)
+            ind = n_pxl_cls > 0
+            m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
 
-        # Compute overall correctly classified pixels.
-        acc_curr = acc_curr.float().view(input.shape[0], -1).mean(-1)
-        acc += acc_curr.sum()
-        n_ex += input.shape[0]
+            # Compute overall correctly classified pixels.
+            #acc_curr = acc_curr.float().view(input.shape[0], -1).mean(-1)
+            #acc += acc_curr.sum()
+            a_acc = acc_cls.sum() / n_pxl_cls.sum()
+            n_ex += input.shape[0]
+            #print('step 2 done')
 
-        # Compute intersection and union.
-        intersection_all = pred == target
-        #pred[target == 0] = 0
-        for cl in range(n_cls):
-            ind = target == cl
-            int_cls[cl] += intersection_all[ind].float().sum()
-            union_cls[cl] += (ind.float().sum() + (pred == cl).float().sum()
-                              - intersection_all[ind].float().sum())
-        ind = union_cls > 0
-        #ind[0] = False
-        m_iou = (int_cls[ind] / union_cls[ind]).mean()
+            # Compute intersection and union.
+            intersection_all = pred == target
+            #pred[target == 0] = 0
+            for cl in range(n_cls):
+                ind = target == cl
+                int_cls[cl] += intersection_all[ind].float().sum()
+                union_cls[cl] += (ind.float().sum() + (pred == cl).float().sum()
+                                  - intersection_all[ind].float().sum())
+            ind = union_cls > 0
+            #ind[0] = False
+            m_iou = (int_cls[ind] / union_cls[ind]).mean()
 
-        print(
-            f'batch={i} running mAcc={m_acc:.2%} batch aAcc={acc_curr.mean():.2%}',
-            f' running mIoU={m_iou:.2%}')
+            print(
+                f'batch={i} running mAcc={m_acc:.2%} running aAcc={a_acc.mean():.2%}',
+                f' running mIoU={m_iou:.2%}')
 
         #print(metrics.compute_iou()[1], metrics.compute_pixel_acc()[1])
 
         if i + 1 == n_batches:
+            print('enough batches seen')
             break
-    l_output = torch.cat(l_output)
 
-    # logger.log(f'mAcc={m_acc:.2%} aAcc={acc / n_ex:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
+    # logger.log(f'mAcc={m_acc:.2%} aAcc={a_acc:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
     #print(acc_cls / n_pxl_cls)
     #print(acc_cls.sum() / n_pxl_cls.sum())
     stats = {
         'mAcc': m_acc.item(),
-        'aAcc': (acc / n_ex).item(),
+        'aAcc': a_acc.item(),
         'mIoU': m_iou.item()}
 
-    if return_output:
-        return stats, l_output
+    return stats, l_output
 
 
 
@@ -174,7 +184,7 @@ def get_data(dataset_cfg, test_cfg):
             base_size=512,
             crop_size=(473, 473))
 
-    elif str(test_cfg['NAME']) == 'ade20k':
+    elif str(test_cfg['NAME']).lower() == 'ade20k':
         val_data = get_segmentation_dataset(test_cfg['NAME'],
             root=dataset_cfg['ROOT'],
             split='val',
@@ -199,10 +209,36 @@ attack_setting = {'pgd': (0.01, 40), 'segpgd': (0.01, 40),
 
 
 
+class MaskClass(nn.Module):
+
+    def __init__(self, ignore_index: int) -> None:
+        super().__init__()
+        self.ignore_index = ignore_index
+
+    def forward(self, input: Tensor) -> Tensor:
+        if self.ignore_index == 0:
+            return input[:, 1:]
+        else:
+            return torch.cat(
+                (input[:, :self.ignore_index],
+                 input[:, self.ignore_index + 1:]), dim=1)
+
+
+def mask_logits(model: nn.Module, ignore_index: int) -> nn.Module:
+    # TODO: adapt for list of indices.
+    layers = OrderedDict([
+        ('model', model),
+        ('mask', MaskClass(ignore_index))
+    ])
+    return nn.Sequential(layers)
+
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
-    parser.add_argument('--eps', type=float, default=8.)
+    parser.add_argument('--eps', type=float, default=16.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=False)
@@ -216,12 +252,13 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
+    model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
     model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
     model_norm = False
     if model_norm:
         print('Add normalization layer.')   
         model = normalize_model(model, IN_MEAN, IN_STD)
+    # model = mask_logits(model, 0)
     model = model.to('cuda')
 
     val_data_loader = get_data(dataset_cfg, test_cfg)
@@ -237,8 +274,10 @@ if __name__ == '__main__':
     preds = []
     lblss = []
 
-    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=dataset_cfg['N_CLS'])
-    for ite, ls in enumerate(['js-avg', 'mask-norm-corrlog-avg']):
+    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+    # print(clean_stats)
+    # exit()
+    for ite, ls in enumerate(['ce-avg', 'mask-ce-avg', 'segpgd-loss', 'cospgd-loss', 'js-avg', 'mask-norm-corrlog-avg']):
         args.attack = ls #'segpgd-loss' 
         if args.adversarial:
             strr = f'adversarial_loss_comparison_{args.attack_type}'
@@ -252,7 +291,8 @@ if __name__ == '__main__':
 
             if args.norm == 'Linf' and args.eps >= 1.:
                 args.eps /= 255.
-            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=ls, los=args.attack)
+
+            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=100, los=args.attack) if args.attack_type == 'pgd' else None
 
             attack_fn = partial(
                 attacker.apgd_restarts,
@@ -271,17 +311,17 @@ if __name__ == '__main__':
         
 
         if args.adversarial:
-            adv_stats, l_outs = clean_accuracy(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'])
-            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"apgd_S_model_{args.attack}_{args.eps:.4f}_n_it_{ls}_{test_cfg['NAME']}.pt" )
+            adv_stats, l_outs = clean_accuracy(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'], ignore_index=-1)
+            torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits/" + f"{args.attack_type}_S_model_{args.attack}_{args.eps:.4f}_n_it_{ls}_{test_cfg['NAME']}.pt" )
        
         with open(cfg['SAVE_DIR'] + "/test_results/main_results/"+ f"{strr}_numbers_{args.eps:.4f}_{test_cfg['NAME']}.txt", 'a+') as f:
             if ite == 0:
                 f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
                 f.write(f"Clean results: {clean_stats}\n")
-                f.write(f"----- Linf radius: {args.eps:.4f} ------")
                 f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
             if args.adversarial:
-                f.write(f"Attack: APGD {args.attack} \t \t Iterations: {args.n_iter} \t alpha: 0.01 \n")   
+                f.write(f"----- Linf radius: {args.eps:.4f} ------")
+                f.write(f"Attack: {args.attack_type} {args.attack} \t \t Iterations: {args.n_iter} \t alpha: 0.01 \n")   
                 f.write(f"Adversarial results: {adv_stats}\n") 
                 # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
             f.write("\n")
