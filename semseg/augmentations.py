@@ -45,14 +45,26 @@ class ColorJitter:
         self.hue = hue
 
     def __call__(self, img: Tensor, mask: Tensor) -> Tuple[Tensor, Tensor]:
+
+
         if self.brightness > 0:
             img = TF.adjust_brightness(img, self.brightness)
-        if self.contrast > 0:
+        # mode == 0 --> do random contrast first
+        # mode == 1 --> do random contrast last
+        mode = random.randint(2)
+        if mode == 1:
             img = TF.adjust_contrast(img, self.contrast)
-        if self.saturation > 0:
-            img = TF.adjust_saturation(img, self.saturation)
-        if self.hue > 0:
-            img = TF.adjust_hue(img, self.hue)
+        # random saturation
+        img = TF.adjust_saturation(img, self.saturation)
+
+        # random hue
+        img = TF.adjust_hue(img, self.hue)
+
+        # random contrast
+        if mode == 0:
+            img = TF.adjust_contrast(img, self.contrast)
+
+
         return img, mask
 
 
@@ -337,8 +349,6 @@ def get_train_augmentation(size: Union[int, Tuple[int], List[int]], seg_fill: in
         # ColorJitter(brightness=0.0, contrast=0.5, saturation=0.5, hue=0.5),
         # RandomAdjustSharpness(sharpness_factor=0.1, p=0.5),
         # RandomAutoContrast(p=0.2),
-        RandomHorizontalFlip(p=0.5),
-        CenterCrop(size),
         # RandomVerticalFlip(p=0.5),
         # RandomGaussianBlur((3, 3), p=0.5),
         # RandomGrayscale(p=0.5),
@@ -346,16 +356,19 @@ def get_train_augmentation(size: Union[int, Tuple[int], List[int]], seg_fill: in
         # Resize(size),
         # RandomCrop(size, p = 0.75),
         # Pad(size, 0),
-        # RandomResizedCrop(size, scale=(0.5, 2.0), seg_fill=0)
+        # RandomResizedCrop(size, scale=(0.5, 2.0), seg_fill=0),
+        # RandomHorizontalFlip(p=0.5),
+        ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.4),
+        # ToTensor()
         # Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     ])
+
+
 
 def get_val_augmentation(size: Union[int, Tuple[int], List[int]]):
     return Compose([
         Resize(size),
-        CenterCrop(size),
-        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    ])
+        CenterCrop(size)])
 
 
 # if __name__ == '__main__':
