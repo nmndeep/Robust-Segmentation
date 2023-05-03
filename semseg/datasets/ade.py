@@ -11,7 +11,7 @@ from torch import distributed as dist
 from PIL import Image
 from .dataset_wrappers import SegmentationDataset
 from .distributed_sampler import DistributedSampler, IterationBasedBatchSampler
-
+from semseg.augmentations import get_train_augmentation, get_val_augmentation
 
 class ADE20KSegmentation(SegmentationDataset):
     """ADE20K Semantic Segmentation Dataset.
@@ -41,7 +41,7 @@ class ADE20KSegmentation(SegmentationDataset):
     >>>     num_workers=4)
     """
     BASE_DIR = 'ADEChallengeData2016'
-    NUM_CLASS = 150
+    NUM_CLASS = 151
 
     def __init__(self, root='../datasets/ade', split='test', mode=None, transform=None, **kwargs):
         super(ADE20KSegmentation, self).__init__(root, split, mode, transform, **kwargs)
@@ -63,7 +63,8 @@ class ADE20KSegmentation(SegmentationDataset):
         mask = Image.open(self.masks[index])
         # synchrosized transform
         if self.mode == 'train':
-            img, mask = self._sync_transform(img, mask)
+            # img, mask = get_train_augmentation(img, mask)
+            img, mask = self._sync_transform(img, mask, bdir=self.BASE_DIR)
         elif self.mode == 'val':
             img, mask = self._val_sync_transform(img, mask)
         else:
@@ -75,7 +76,7 @@ class ADE20KSegmentation(SegmentationDataset):
         return img, mask #, os.path.basename(self.images[index])
 
     def _mask_transform(self, mask):
-        return torch.LongTensor(np.array(mask).astype('int32') - 1)
+        return torch.LongTensor(np.array(mask).astype('int32'))
 
     def __len__(self):
         return len(self.images)
