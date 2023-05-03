@@ -16,6 +16,8 @@ from semseg.utils.utils import setup_cudnn
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import torchvision
+from functools import partial
+
 
 @torch.no_grad()
 def evaluate(model, dataloader, device, cls, n_batches=-1):
@@ -50,7 +52,30 @@ def segpgd_loss(pred, target, lam):
     loss = (((1-lam) * l_j  + lam * l_k)/(sh[1]*sh[2])) #.view(sh[0], -1).mean(-1)
     return loss
 
+def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None):
+    """Compute JS divergence between p and q.
 
+    p: logits [bs, n_cls, ...]
+    q: labels [bs]
+    softmax_output: if softmax has already been applied to p
+    reduction: to pass to KL computation
+    red_dim: dimensions over which taking the sum
+    """
+    
+    if not softmax_output:
+        p = F.softmax(p, 1)
+    q = F.one_hot(q.view(q.shape[0], -1), p.shape[1])
+    q = q.permute(0, 2, 1).view(p.shape).float()
+    
+    m = (p + q) / 2
+    
+    loss = (F.kl_div(m.log(), p, reduction=reduction)
+            + F.kl_div(m.log(), q, reduction=reduction)) / 2
+    if red_dim is not None:
+        assert reduction == 'none', 'Incompatible setup.'
+        loss = loss.sum(dim=red_dim)
+    
+    return loss
 
 def cospgd_loss(pred, target, reduction='mean'):
     """Implementation of the loss for semantic segmentation from
@@ -126,10 +151,49 @@ def attack_pgd_training(model, X, y, eps, alpha, opt, half_prec, attack_iters, r
 
     return delta.detach()
 
+def js_loss(p, q, reduction='mean'):
 
+    loss = js_div_fn(p, q, red_dim=(1)) # Sum over classes.
+    if reduction == 'mean':
+        return loss.view(p.shape[0], -1).mean(-1)
+    elif reduction == 'none':
+        return loss
 
-losses = {'pgd': lambda x, y: F.cross_entropy(x, y), 'cospgd-loss':
-cospgd_loss, 'segpgd-loss': segpgd_loss}
+def masked_cross_entropy(pred, target):
+    """Cross-entropy of only correctly classified pixels."""
+
+    mask = pred.max(1)[1] == target
+    loss = F.cross_entropy(pred, target, reduction='none')
+    loss = (mask.float() * loss).view(pred.shape[0], -1).mean(-1)
+
+    return loss
+
+def single_logits_loss(pred, target, normalized=False, reduction='none',
+        masked=False):
+    """The (normalized) logit of the correct class is minimized."""
+
+    if normalized:
+        pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #.detach()
+    sh = target.shape
+    n_cls = pred.shape[1]
+    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    y = y.permute(0, 2, 1).view(pred.shape)
+    loss = -1 * (y * pred).sum(1)
+    if masked:
+        mask = pred.max(1)[1] == target
+        loss = mask.float().detach() * loss
+
+    if reduction == 'mean':
+        return loss.view(sh[0], -1).mean(-1)
+    return loss
+
+losses = {'pgd': lambda x, y: F.cross_entropy(x, y),
+    'cospgd-loss': cospgd_loss, 
+    'segpgd-loss': segpgd_loss,
+    'norm-corrlog-avg': partial(single_logits_loss, normalized=True, reduction='mean'),
+    'mask-ce-avg': masked_cross_entropy,
+    'js-avg': js_loss
+}
 
 
 class Pgd_Attack():
