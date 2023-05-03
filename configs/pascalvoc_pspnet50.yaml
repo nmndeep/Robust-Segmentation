@@ -14,13 +14,18 @@ DATASET:
   N_CLS         : 21
   SEED          : 0
   
-TRAIN:
+TRAIN:  
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
   BATCH_SIZE    : 36                 # batch size used to train
-  EPOCHS        : 50             # number of epochs to train
+  EPOCHS        : 200             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
+  ATTACK        : pgd
+  LOSS_FN       : pgd
+  EPS           : 4
+  N_ITERS       : 2
+  FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
 
@@ -36,17 +41,16 @@ OPTIMIZER:
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
   POWER         : 1.0             # scheduler power
-  WARMUP        : 10              # warmup epochs used in scheduler
+  WARMUP        : 40              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
-
 EVAL:
-  NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-
+  NAME          : pascalvoc                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  BACKBONE      : ResNet-50
   MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/PSPNet_ResNet-50_2023-04-18-15_44_08_CLEAN_RN50_MOD/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
-  BATCH_SIZE    : 32                                            # evaluation image size in (h, w)                       
+  BATCH_SIZE    : 16                                             # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
