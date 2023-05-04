@@ -57,11 +57,13 @@ def seed_worker(worker_id):
 BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logits_new/'
 
 
-EPS = 0.0471 #
+EPS = 0.0314 #
 ITERR = 2 #, #5
 strr = [
+f"apgd_ce-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
 f"apgd_mask-ce-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
 f"apgd_segpgd-loss_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
+f"apgd_cospgd-loss_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
 f"apgd_js-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
 f"apgd_mask-norm-corrlog-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt"
 ]
@@ -90,7 +92,6 @@ def clean_accuracy(
     aaacc = []
     for i, vals in enumerate(data_loder):
        
-
         if False:
             print(i)
         else:
@@ -106,9 +107,10 @@ def clean_accuracy(
 
             for cl in range(n_cls):
                 ind = target == cl
-                acc_curr = acc_curr * ind
-                acc_cls[:, :, cl] += acc_curr.view(acc_curr.shape[0], acc_curr.shape[1], -1).float().sum((2))
-                n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], -1).float().sum(1)
+                ind = ind.expand(class_wise_logits.shape[0], -1, -1, -1)
+                acc_curr_ = acc_curr  * ind
+                acc_cls[:, :, cl] += acc_curr_.view(acc_curr.shape[0], acc_curr.shape[1], -1).float().sum((2))
+                n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
             ind = n_pxl_cls > 0
        
             tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
@@ -119,12 +121,16 @@ def clean_accuracy(
             print('enough batches seen')
             break
     final_acc = torch.cat(aaacc, dim=-1)
-    at_w_sum = final_acc.min(0)[1].unique(return_counts=True)[1]
-    final_dict = dict((el, at_w_sum[i].item()) for i, el in enumerate(losses_lis))
-    print(final_dict)
- 
-    with open(BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.txt", 'a+') as f:
-        f.write(f"LOSS-wise : {final_dict}\n")
+    print(final_acc.size())
+    at_w_sum = final_acc.min(0)[0].mean() #unique(return_counts=True)[1]
+    print(final_acc.mean(-1))
+    # save_dict = {'worst_case_acc': at_w_sum,
+    #                 'final_matrix': final_acc}
+    # torch.save(save_dict, BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.pt")
+    # print(strr[0][-62:-3])
+    print(at_w_sum)
+    # with open(BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.txt", 'a+') as f:
+
     # print(stats)
 
     # return stats
@@ -160,7 +166,7 @@ def get_data(dataset_cfg, test_cfg):
 
 
     val_loader = torch.utils.data.DataLoader(
-        val_data, batch_size=32, shuffle=False,
+        val_data, batch_size=48, shuffle=False,
         num_workers=1, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g)
 
     return val_loader
