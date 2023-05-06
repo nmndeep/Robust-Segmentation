@@ -248,7 +248,7 @@ class Trainer:
                     iterr, self.max_iters, self.optimizer.param_groups[0]['lr'], train_loss / (iterr+1),
                     str(datetime.timedelta(seconds=int(time.time() - time1))), eta_string))
 
-            eval_freq = 5 if (iterr+1) *(self.iters_per_epoch) <=  self.epochs - 20 else 2
+            eval_freq = 5 if (iterr+1) * (self.iters_per_epoch) <=  self.epochs - 20 else 2
 
             if self.gpu == 0 and (iterr+1) % (self.iters_per_epoch*eval_freq) == 0:
 
@@ -257,6 +257,10 @@ class Trainer:
                 macc = eval__stats[1]
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
                 model.train()
+
+                # if (iterr+1) % (self.iters_per_epoch) >=  self.epochs - 100:
+                #     torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + f"/model_ckpt_{iterr+1}.pth")
+
 
                 if miou > best_mIoU:
                     best_mIoU = miou

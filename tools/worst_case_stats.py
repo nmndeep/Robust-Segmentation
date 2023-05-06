@@ -55,17 +55,28 @@ def seed_worker(worker_id):
 
 
 BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logits_new/'
+# apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-EPS = 0.0314 #
-ITERR = 2 #, #5
+EPS = 0.0627 #0.0157, 0.0314, 0.0471, 0.0627
+ITERR = "5iter" #, #"S_mod"
+
 strr = [
-f"apgd_ce-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
-f"apgd_mask-ce-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
-f"apgd_segpgd-loss_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_cospgd-loss_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_js-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_mask-norm-corrlog-avg_{ITERR}iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt"
+f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
+f"apgd_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
+f"apgd_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
+f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
+f"apgd_js-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
+f"apgd_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt"
+]
+
+strr1 = [
+# f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
+f"apgd_mask-ce-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt", 
+f"apgd_segpgd-loss_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
+# f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
+f"apgd_js-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
+f"apgd_mask-norm-corrlog-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt"
 ]
 
 losses_lis = ['mask-ce-avg','segpgd-loss', 'js-avg','mask-norm-corrlog-avg']
@@ -84,51 +95,80 @@ def clean_accuracy(
     # if logger is None:
     #     logger = Logger(None)
     l_output = []
+    l_output2 = []
+
+    if ITERR == '5iter':
+        fold = '5iter_rob_model'
+    elif ITERR == '2iter':
+        fold = '2iter_rob_model'
+    else:
+        fold = 'S_model'
+
     for i in range(len(strr)):
-        l_output.append(torch.load(BASE_DIR + strr[i]))
-    class_wise_logits = torch.stack(l_output)
-    # print(class_wise_logits.size())
-    # final_acc = []
-    aaacc = []
-    for i, vals in enumerate(data_loder):
-       
-        if False:
-            print(i)
+        l_output.append(torch.load(BASE_DIR + f"{fold}/" + strr[i]))
+        l_output2.append(torch.load(BASE_DIR + f"{fold}/" +strr[i][:-3]+ "_SD_220.pt"))
+    aa= [l_output, l_output2]
+    final_acc_1 = None
+    final_acc_2 = None
+    for j in range(2):
+        class_wise_logits = torch.stack(aa[j])
+        # class_wise_logits2 = torch.stack(l_output2)
+        # class_wise_logits = 
+        # print(class_wise_logits.size())
+
+        aaacc = []
+        for i, vals in enumerate(data_loder):
+           
+            if False:
+                print(i)
+            else:
+                _, target = vals[0], vals[1]
+                BS = target.shape[0]
+                acc_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+                n_pxl_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+
+                output = class_wise_logits[:, i*BS:i*BS+BS]
+                pred = output.max(2)[1].cpu()
+                pred[:, (target == ignore_index)] = ignore_index
+                acc_curr = pred == target
+
+                for cl in range(n_cls):
+                    ind = target == cl
+                    ind = ind.expand(class_wise_logits.shape[0], -1, -1, -1)
+                    acc_curr_ = acc_curr  * ind
+                    acc_cls[:, :, cl] += acc_curr_.view(acc_curr.shape[0], acc_curr.shape[1], -1).float().sum((2))
+                    n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
+                ind = n_pxl_cls > 0
+           
+                tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
+                # print(tenss.size())
+                aaacc.append(tenss)
+
+            if i + 1 == n_batches:
+                print('enough batches seen')
+                break
+        if j == 0:
+            final_acc_1 = (torch.cat(aaacc, dim=-1))
         else:
-            _, target = vals[0], vals[1]
-            BS = target.shape[0]
-            acc_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
-            n_pxl_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+            final_acc_2 = (torch.cat(aaacc, dim=-1))
 
-            output = class_wise_logits[:, i*BS:i*BS+BS]
-            pred = output.max(2)[1].cpu()
-            pred[:, (target == ignore_index)] = ignore_index
-            acc_curr = pred == target
+    # print(final_acc.size())
+    final_acc_ = torch.cat((final_acc_1, final_acc_2), 1)
+    print(final_acc_.shape)
+    at_w_sum1 = final_acc_1.mean(-1)
+    at_w_sum2 = final_acc_2.mean(-1)
+    at_w_sum_full = final_acc_.min(0)[0].mean() #unique(return_counts=True)[1]
+    print("Loss-wise: 1", at_w_sum1)
+    print("Loss-wise: 2", at_w_sum2)
+    print("Loss wise - worse", final_acc_.mean(-1))
+    print("Worst case", at_w_sum_full)
+    save_dict = {'worst_case_across_losses': at_w_sum_full,
+                'loss_wise_indiv': at_w_sum1, 
+                'loss_wise_worse': final_acc_.mean(-1),
+                'final_matrix': final_acc_}
 
-            for cl in range(n_cls):
-                ind = target == cl
-                ind = ind.expand(class_wise_logits.shape[0], -1, -1, -1)
-                acc_curr_ = acc_curr  * ind
-                acc_cls[:, :, cl] += acc_curr_.view(acc_curr.shape[0], acc_curr.shape[1], -1).float().sum((2))
-                n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
-            ind = n_pxl_cls > 0
-       
-            tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
-            # print(tenss.size())
-            aaacc.append(tenss)
-
-        if i + 1 == n_batches:
-            print('enough batches seen')
-            break
-    final_acc = torch.cat(aaacc, dim=-1)
-    print(final_acc.size())
-    at_w_sum = final_acc.min(0)[0].mean() #unique(return_counts=True)[1]
-    print(final_acc.mean(-1))
-    # save_dict = {'worst_case_acc': at_w_sum,
-    #                 'final_matrix': final_acc}
-    # torch.save(save_dict, BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.pt")
+    torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{strr[1][-62:-3]}_over_2_seeds.pt")
     # print(strr[0][-62:-3])
-    print(at_w_sum)
     # with open(BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.txt", 'a+') as f:
 
     # print(stats)
@@ -171,6 +211,11 @@ def get_data(dataset_cfg, test_cfg):
 
     return val_loader
 
+worse_comp = ['WORST_CASE_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_over_2_seeds.pt']
+
+# 'WORST_CASE_S_mod_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB.pt']
+# , 'WORST_CASE_5iter_rob_mod_0.0627_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt']
+# 'WORST_CASE_5iter_rob_mod_0.0157_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt',
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean.yaml')
@@ -188,14 +233,47 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
-    model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
-    model_norm = False
-    if model_norm:
-        print('Add normalization layer.')   
-        model = normalize_model(model, IN_MEAN, IN_STD)
-    # model = mask_logits(model, 0)
-    model = model.to('cuda')
+    if False:
+        out_str = "worst_case_" + worse_comp[0][10:16] + worse_comp[0][-37:-3]
+        eps_ = ['4', '12']
+        liss = []
+        indices = [[1, 4, 5], [1, 5], [1, 2, 5], [2, 4, 5], [1, 2]]
+        final_dict = {}
+        indx_str = ['mask-ce+js+mask-norm', 'mask-ce+mask-norm', 'mask-ce+segpgd+mask-norm', 'segpgd+js+mask-norm', 'mask-ce+segpgd']
+# iterating through the elements of list
+        for i in eps_:
+            final_dict[i] = None
+        import json 
+        if ITERR == '5iter':
+            fold = '5iter_rob_model'
+        elif ITERR == '2iter':
+            fold = '2iter_rob_model'
+        else:
+            fold = 'S_model'
+    
+        for i in range(len(worse_comp)):
+            vall = torch.load(BASE_DIR + f"{fold}/logs/{worse_comp[i]}")
+            final_dict[eps_[i]] = {}
+            print(vall['loss_wise_worse'])
+            exit()
+            final_dict[eps_[i]]['worst_all'] = vall['worst_case_across_losses'].item()
+            for j in range(len(indices)):
+                final_acc_ = vall['final_matrix'][indices[j]]
+                final_dict[eps_[i]][indx_str[j]] = final_acc_.min(0)[0].mean().item() 
 
-    val_data_loader = get_data(dataset_cfg, test_cfg)
-    clean_stats = clean_accuracy(val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+
+        json.dump(final_dict, open(BASE_DIR + f"/{fold}/{out_str}.txt", 'w'))
+        # with open(BASE_DIR + f"worst_case_numbers/{out_str}.txt", 'a+') as f:
+        #         pickle.dump(final_dict, f)
+
+    else:
+        model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
+        model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
+        model_norm = False
+        if model_norm:
+            print('Add normalization layer.')   
+            model = normalize_model(model, IN_MEAN, IN_STD)
+        # model = mask_logits(model, 0)
+        model = model.to('cuda')
+        val_data_loader = get_data(dataset_cfg, test_cfg)
+        clean_stats = clean_accuracy(val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)

@@ -15,19 +15,19 @@ def get_optimizer(model: nn.Module, optimizer: str, lr: float, weight_decay: flo
     #     {"params": group_weight(model.get_decoder_params(), 1)}
 
     # ]
-    if dataset == 'ade20k':
-        #hard-coded from convnext-orig configs
-        if 'ConvNeXt-T_CVST' in backbone:
-            ll = 6
-        elif 'ConvNeXt-S_CVST' in backbone:
-            ll = 12
-        paramss = []
-        paramss.extend(group_weight(model.decode_head))# add_params(paramss, model, lr, weight_decay)
-        paramss.extend(group_weight(model.auxiliary_head))
-        paramss = add_params(paramss, model.backbone, lr, weight_decay, ll)
+    # if dataset == 'ade20k':
+    #     #hard-coded from convnext-orig configs
+    #     if 'ConvNeXt-T_CVST' in backbone:
+    #         ll = 6
+    #     elif 'ConvNeXt-S_CVST' in backbone:
+    #         ll = 12
+    #     paramss = []
+    #     paramss.extend(group_weight(model.decode_head))# add_params(paramss, model, lr, weight_decay)
+    #     paramss.extend(group_weight(model.auxiliary_head))
+    #     paramss = add_params(paramss, model.backbone, lr, weight_decay, ll)
 
-    else:
-        paramss = group_weight(model)
+    # else:
+    paramss = group_weight(model)
     # print(len(paramss))
     # print(paramss[-1])
     # print(paramss)

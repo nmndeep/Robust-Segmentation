@@ -74,15 +74,16 @@ class SegmentationDataset(object):
         img = img.crop((x1, y1, x1 + crop_size, y1 + crop_size))
         mask = mask.crop((x1, y1, x1 + crop_size, y1 + crop_size))
         # gaussian blur as in PSP
-        if bdir is not None:
-            if random.random() < 0.5:
-                img = F.adjust_brightness(img, 0.4)
-                img = F.adjust_contrast(img, 0.4)
-            if random.random() < 0.5:
-                img = F.adjust_saturation(img, 0.4)
-            if random.random() < 0.5:
-                img = F.adjust_hue(img, 0.4)
-
+        # if bdir is not None:
+        #     if random.random() < 0.5:
+        #         img = F.adjust_brightness(img, 0.4)
+        #     if random.random() < 0.5:
+        #         img = F.adjust_contrast(img, 0.4)
+        #     # if random.random() < 0.5:
+        #     #     img = F.adjust_saturation(img, 0.4)
+        #     # if random.random() < 0.5:
+        #     #     img = F.adjust_hue(img, 0.4)
+        # else:
         if random.random() < 0.5:
             img = img.filter(ImageFilter.GaussianBlur(radius=random.random()))
         # final transform
