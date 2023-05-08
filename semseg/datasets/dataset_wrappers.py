@@ -2,8 +2,7 @@
 import random
 import numpy as np
 
-from PIL import Image, ImageOps, ImageFilter, ImageEnhance
-from torchvision.transforms import functional as F
+from PIL import Image, ImageOps, ImageFilter
 
 __all__ = ['SegmentationDataset']
 
@@ -44,7 +43,7 @@ class SegmentationDataset(object):
         img, mask = self._img_transform(img), self._mask_transform(mask)
         return img, mask
 
-    def _sync_transform(self, img, mask, bdir=None):
+    def _sync_transform(self, img, mask):
         # random mirror
         if random.random() < 0.5:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
@@ -74,16 +73,6 @@ class SegmentationDataset(object):
         img = img.crop((x1, y1, x1 + crop_size, y1 + crop_size))
         mask = mask.crop((x1, y1, x1 + crop_size, y1 + crop_size))
         # gaussian blur as in PSP
-        # if bdir is not None:
-        #     if random.random() < 0.5:
-        #         img = F.adjust_brightness(img, 0.4)
-        #     if random.random() < 0.5:
-        #         img = F.adjust_contrast(img, 0.4)
-        #     # if random.random() < 0.5:
-        #     #     img = F.adjust_saturation(img, 0.4)
-        #     # if random.random() < 0.5:
-        #     #     img = F.adjust_hue(img, 0.4)
-        # else:
         if random.random() < 0.5:
             img = img.filter(ImageFilter.GaussianBlur(radius=random.random()))
         # final transform

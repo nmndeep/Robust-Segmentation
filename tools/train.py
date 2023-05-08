@@ -261,6 +261,7 @@ class Trainer:
                 # if (iterr+1) % (self.iters_per_epoch) >=  self.epochs - 100:
                 #     torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + f"/model_ckpt_{iterr+1}.pth")
 
+                torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + f"/model_ckpt_{str(iterr+1)}.pth")
 
                 if miou > best_mIoU:
                     best_mIoU = miou

@@ -212,7 +212,6 @@ class Pgd_Attack():
         delta = torch.zeros_like(X).cuda()
         delta.requires_grad = True
         # trg = y.squeeze(1)
-        print(y.min(), y.max())
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
             logits = model(input=(X + delta).clamp(0., 1.))

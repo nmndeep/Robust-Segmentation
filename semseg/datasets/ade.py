@@ -11,7 +11,7 @@ from torch import distributed as dist
 from PIL import Image
 from .dataset_wrappers import SegmentationDataset
 from .distributed_sampler import DistributedSampler, IterationBasedBatchSampler
-from semseg.augmentations import get_train_augmentation, get_val_augmentation
+
 
 class ADE20KSegmentation(SegmentationDataset):
     """ADE20K Semantic Segmentation Dataset.
@@ -41,13 +41,18 @@ class ADE20KSegmentation(SegmentationDataset):
     >>>     num_workers=4)
     """
     BASE_DIR = 'ADEChallengeData2016'
-    NUM_CLASS = 151
+    #NUM_CLASS = 150
 
-    def __init__(self, root='../datasets/ade', split='test', mode=None, transform=None, **kwargs):
+    def __init__(self, root='../datasets/ade', split='test', mode=None, transform=None,
+                 n_cls=150, **kwargs):
         super(ADE20KSegmentation, self).__init__(root, split, mode, transform, **kwargs)
         root = os.path.join(root, self.BASE_DIR)
         assert os.path.exists(root), "Please setup the dataset using ../datasets/ade20k.py"
         self.images, self.masks = _get_ade20k_pairs(root, split)
+        self.n_classes = n_cls
+        if self.n_classes not in [150, 151]:
+            raise ValueError(f'Invalid number of classes: {self.n_classes}.')
+        self.offset = 0 #if self.n_classes == 151 else 1
         assert (len(self.images) == len(self.masks))
         if len(self.images) == 0:
             raise RuntimeError("Found 0 images in subfolders of:" + root + "\n")
@@ -55,16 +60,15 @@ class ADE20KSegmentation(SegmentationDataset):
 
     def __getitem__(self, index):
         img = Image.open(self.images[index]).convert('RGB')
-        # if self.mode == 'test':
-        #     img = self._img_transform(img)
-        #     if self.transform is not None:
-        #         img = self.transform(img)
-        #     return img, os.path.basename(self.images[index])
+        if self.mode == 'test':
+            img = self._img_transform(img)
+            if self.transform is not None:
+                img = self.transform(img)
+            return img, os.path.basename(self.images[index])
         mask = Image.open(self.masks[index])
         # synchrosized transform
         if self.mode == 'train':
-            # img, mask = get_train_augmentation(img, mask)
-            img, mask = self._sync_transform(img, mask, bdir=self.BASE_DIR)
+            img, mask = self._sync_transform(img, mask)
         elif self.mode == 'val':
             img, mask = self._val_sync_transform(img, mask)
         else:
@@ -76,14 +80,14 @@ class ADE20KSegmentation(SegmentationDataset):
         return img, mask #, os.path.basename(self.images[index])
 
     def _mask_transform(self, mask):
-        return torch.LongTensor(np.array(mask).astype('int32'))
+        return torch.LongTensor(np.array(mask).astype('int32') - self.offset)
 
     def __len__(self):
         return len(self.images)
 
     @property
     def pred_offset(self):
-        return 1
+        return self.offset
 
     @property
     def classes(self):
@@ -173,6 +177,11 @@ def _get_ade20k_pairs(folder, mode='train'):
                 print('cannot find the mask:', maskpath)
 
     return img_paths, mask_paths
+
+
+
+
+
 
 
 if __name__ == '__main__':
