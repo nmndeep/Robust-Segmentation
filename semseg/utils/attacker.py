@@ -9,26 +9,34 @@ from functools import partial
 from autoattack.other_utils import L1_norm, L2_norm, L0_norm, Logger
 
 
-def compute_iou_acc(pred, target, n_cls, verbose=False):
-
+def compute_iou_acc(
+    pred, target, n_cls, verbose=False, ignore_index=-1, device=None):
+    
+    #print('until 0')
+    if device is None:
+        device = pred.device
     acc = 0
-    acc_cls = torch.zeros(n_cls)
+    acc_cls = torch.zeros(n_cls, device=device)
     n_ex = 0
-    n_pxl_cls = torch.zeros(n_cls)
-    int_cls = torch.zeros(n_cls)
-    union_cls = torch.zeros(n_cls)
+    n_pxl_cls = torch.zeros(n_cls, device=device)
+    int_cls = torch.zeros(n_cls, device=device)
+    union_cls = torch.zeros(n_cls, device=device)
+    #print('until 1')
+    pred[target == ignore_index] = ignore_index
     acc_curr = pred == target
 
     # Compute correctly classified pixels for each class.
     for cl in range(n_cls):
         ind = target == cl
-        acc_cls[cl] += acc_curr[ind].float().sum()
+        #print(ind.device, acc_cls.device, cl, acc_cls.shape)
+        acc_cls[cl] += (acc_curr * ind).float().sum()
         n_pxl_cls[cl] += ind.float().sum()
     ind = n_pxl_cls > 0
-    m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
+    m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean().cpu()
 
     # Compute overall correctly classified pixels.
-    a_acc = acc_curr.float().mean()
+    #a_acc = acc_curr.float().mean().cpu()
+    a_acc = (acc_cls.sum() / n_pxl_cls.sum()).cpu()
 
     # Compute intersection and union.
     intersection_all = pred == target
@@ -38,16 +46,13 @@ def compute_iou_acc(pred, target, n_cls, verbose=False):
         union_cls[cl] += (ind.float().sum() + (pred == cl).float().sum()
                           - intersection_all[ind].float().sum())
     ind = union_cls > 0
-    m_iou = (int_cls[ind] / union_cls[ind]).mean()
+    m_iou = (int_cls[ind] / union_cls[ind]).mean().cpu()
 
     if verbose:
         print(
             f'mAcc={m_acc:.2%} aAcc={a_acc:.2%}', f' mIoU={m_iou:.2%}')
 
     return m_acc, a_acc, m_iou
-
-
-
 
 def L1_projection(x2, y2, eps1):
     '''
@@ -135,7 +140,7 @@ def dlr_loss_targeted(x, y, y_target):
         x_sorted[:, -3] + x_sorted[:, -4]) + 1e-12)
 
 
-def cospgd_loss(pred, target, reduction='mean'):
+def cospgd_loss(pred, target, reduction='mean', ignore_index=-1):
     """Implementation of the loss for semantic segmentation from
     https://arxiv.org/abs/2302.02213.
 
@@ -147,12 +152,19 @@ def cospgd_loss(pred, target, reduction='mean'):
     sigm_pred = torch.sigmoid(pred)
     sh = target.shape
     n_cls = pred.shape[1]
-    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    
+    mask_background = (target != ignore_index).long()
+    y = mask_background * target  # One-hot encoding doesn't support -1.
+    y = F.one_hot(y.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
     #w = (sigm_pred * y).sum(1) / pred.norm(p=2, dim=1) #sigm_pred.max(dim=1)[0] #pred.norm(p=2, dim=1)
     w = F.cosine_similarity(sigm_pred, y)
-    loss = F.cross_entropy(pred, target, reduction='none')
+    w = mask_background * w  # Ignore pixels with label -1.
+    
+    loss = F.cross_entropy(
+        pred, target, reduction='none', ignore_index=ignore_index)
     #with torch.no_grad():
+    assert w.shape == loss.shape
     loss = w.detach() * loss
 
     if reduction == 'mean':
@@ -161,13 +173,16 @@ def cospgd_loss(pred, target, reduction='mean'):
     return loss
 
 
-def masked_cross_entropy(pred, target):
+def masked_cross_entropy(pred, target, reduction='none', ignore_index=-1):
     """Cross-entropy of only correctly classified pixels."""
 
     mask = pred.max(1)[1] == target
-    loss = F.cross_entropy(pred, target, reduction='none')
-    loss = (mask.float() * loss).view(pred.shape[0], -1).mean(-1)
-
+    mask = (target != ignore_index) * mask  # TODO: this should be unnecessary.
+    loss = F.cross_entropy(pred, target, reduction='none', ignore_index=-1)
+    loss = mask.float().detach() * loss
+    
+    if reduction == 'mean':
+        return loss.view(pred.shape[0], -1).mean(-1)
     return loss
 
 
@@ -263,16 +278,19 @@ def masked_margin_loss(pred, target):
 
 
 def single_logits_loss(pred, target, normalized=False, reduction='none',
-        masked=False):
+        masked=False, ignore_index=-1):
     """The (normalized) logit of the correct class is minimized."""
 
     if normalized:
         pred = pred / (pred ** 2).sum(1, keepdim=True).sqrt() #.detach()
     sh = target.shape
     n_cls = pred.shape[1]
-    y = F.one_hot(target.view(sh[0], -1), n_cls)
+    mask_background = (target != ignore_index).long()
+    y = target * mask_background  # One-hot doesn't support -1 class.
+    y = F.one_hot(y.view(sh[0], -1), n_cls)
     y = y.permute(0, 2, 1).view(pred.shape)
     loss = -1 * (y * pred).sum(1)
+    loss = loss * mask_background  # Ignore contribution of background.
     if masked:
         mask = pred.max(1)[1] == target
         loss = mask.float().detach() * loss
@@ -303,18 +321,24 @@ def targeted_single_logits_loss(
     return loss
 
 
-def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None):
+def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None,
+    ignore_index=-1):
     """Compute JS divergence between p and q.
 
     p: logits [bs, n_cls, ...]
-    q: labels [bs]
+    q: labels [bs, ...]
     softmax_output: if softmax has already been applied to p
     reduction: to pass to KL computation
     red_dim: dimensions over which taking the sum
+    ignore_index: the pixels with this label are ignored
     """
     
     if not softmax_output:
         p = F.softmax(p, 1)
+    mask_background = (q != ignore_index).long()
+    if reduction != 'none' and mask_background.sum() > 0:
+        raise ValueError('Incompatible setup.')
+    q = mask_background * q  # Change labels -1 to 0 for one-hot.
     q = F.one_hot(q.view(q.shape[0], -1), p.shape[1])
     q = q.permute(0, 2, 1).view(p.shape).float()
     
@@ -322,16 +346,18 @@ def js_div_fn(p, q, softmax_output=False, reduction='none', red_dim=None):
     
     loss = (F.kl_div(m.log(), p, reduction=reduction)
             + F.kl_div(m.log(), q, reduction=reduction)) / 2
+    loss = mask_background.unsqueeze(1) * loss  # Ignore contribution of background.
     if red_dim is not None:
         assert reduction == 'none', 'Incompatible setup.'
         loss = loss.sum(dim=red_dim)
+        #loss = mask_background * loss
     
     return loss
 
 
 def js_loss(p, q, reduction='mean'):
 
-    loss = js_div_fn(p, q, red_dim=(1)) # Sum over classes.
+    loss = js_div_fn(p, q, red_dim=(1))  # Sum over classes.
     if reduction == 'mean':
         return loss.view(p.shape[0], -1).mean(-1)
     elif reduction == 'none':
@@ -402,7 +428,7 @@ def dice_loss(pred, target, smooth=1e-10, exponent=2):
     return total_loss / num_classes
 
 
-def segpgd_loss(pred, target, t, max_t, reduction='none'):
+def segpgd_loss(pred, target, t, max_t, reduction='none', ignore_index=-1):
     """Implementation of the loss of https://arxiv.org/abs/2207.12391.
 
     pred: B x cls x h x w
@@ -412,31 +438,33 @@ def segpgd_loss(pred, target, t, max_t, reduction='none'):
     """
 
     lmbd = t / 2 / max_t
-    corrcl = (pred.max(1)[1] == target).float()
-    loss = F.cross_entropy(pred, target, reduction='none')
+    corrcl = (pred.max(1)[1] == target).float().detach()
+    loss = F.cross_entropy(pred, target, reduction='none',
+        ignore_index=ignore_index)
     loss = (1 - lmbd) * corrcl * loss + lmbd * (1 - corrcl) * loss
 
     if reduction == 'mean':
-        return loss.view(target.shape[0], - 1).mean(-1)
+        return loss.view(target.shape[0], -1).mean(-1)
     return loss
 
 
 criterion_dict = {
-    'ce': lambda x, y: F.cross_entropy(x, y, reduction='none'),
+    'ce': lambda x, y: F.cross_entropy(
+        x, y, reduction='none', ignore_index=-1),
     'dlr': dlr_loss,
     'dlr-targeted': dlr_loss_targeted,
     'ce-avg': lambda x, y: F.cross_entropy(
-        x, y, reduction='none').view(x.shape[0], -1).mean(-1),
+        x, y, reduction='none', ignore_index=-1),
     #'dlr-avg': lambda x, y: dlr_loss(x, y).view(x.shape[0], -1).mean(-1),
-    'cospgd-loss': cospgd_loss,
-    'cospgd-indiv': partial(cospgd_loss, reduction='none'),
+    'cospgd-loss': partial(cospgd_loss, reduction='none'),
+    #'cospgd-indiv': partial(cospgd_loss, reduction='none'),
     'mask-ce-avg': masked_cross_entropy,
     'margin-avg': lambda x, y: margin_loss(x, y).view(x.shape[0], -1).mean(-1),
     'mask-margin-avg': masked_margin_loss,
     'norm-margin-avg': lambda x, y: normalized_margin_loss(
         x, y).view(x.shape[0], -1).mean(-1),
-    'js-avg': js_loss,
-    'js': partial(js_loss, reduction='none'),
+    'js-avg': partial(js_loss, reduction='none'),
+    #'js': partial(js_loss, reduction='none'),
     'orth-ce-avg': lambda x, y, v: orthogonal_loss(x, y, v, loss_fn='ce'),
     'dice-loss': lambda x, y: 1. * dice_loss(x, y),
     'q-ce-avg': lambda x, y: quantile_loss(
@@ -451,21 +479,28 @@ criterion_dict = {
         x, y, loss_fn='js').view(x.shape[0], -1).mean(-1),
     'bal-cos-avg': lambda x, y: cls_balanced_loss(
         x, y, loss_fn='cospgd-indiv').view(x.shape[0], -1).mean(-1),
-    'segpgd-loss': partial(segpgd_loss, reduction='mean'),
+    'segpgd-loss': partial(segpgd_loss, reduction='none'),
     'corrlog-avg': partial(
-        single_logits_loss, normalized=False, reduction='mean'),
+        single_logits_loss, normalized=False, reduction='none'),
     'norm-corrlog-avg': partial(
-        single_logits_loss, normalized=True, reduction='mean'),
+        single_logits_loss, normalized=True, reduction='none'),
     'norm-corrlog-avg-targeted': partial(
-        targeted_single_logits_loss, normalized=True, reduction='mean'),
+        targeted_single_logits_loss, normalized=True, reduction='none'),
     'mask-corrlog-avg': partial(
-        single_logits_loss, normalized=False, reduction='mean', masked=True),
+        single_logits_loss, normalized=False, reduction='none', masked=True),
     'mask-norm-corrlog-avg': partial(
-        single_logits_loss, normalized=True, reduction='mean', masked=True),
+        single_logits_loss, normalized=True, reduction='none', masked=True),
     'mask-norm-corrlog-avg-targeted': partial(
-        targeted_single_logits_loss, normalized=True, reduction='mean',
+        targeted_single_logits_loss, normalized=True, reduction='none',
         masked=True),
     }
+
+
+def pixel_to_img_loss(loss, mask_background=None):
+
+    if mask_background is not None:
+        loss = mask_background * loss
+    return loss.view(loss.shape[0], -1).mean(-1)
 
 
 def check_oscillation(x, j, k, y5, k3=0.75):
@@ -476,12 +511,12 @@ def check_oscillation(x, j, k, y5, k3=0.75):
         return (t <= k * k3 * torch.ones_like(t)).float()
 
 
-
 def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     verbose=False, is_train=False, early_stop=False, track_loss=None,
-    logger=None, #n_cls=21
+    logger=None, y_target=None, ignore_index=-1, x_init=None, #n_cls=21
     ):
     assert not model.training
+    assert ignore_index == -1, 'Only `ignore_index = 1` is supported.'
     device = x.device
     ndims = len(x.shape) - 1
     bs = x.shape[0]
@@ -499,7 +534,19 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         if norm == 'Linf':
             t = 2 * torch.rand_like(x) - 1
             x_adv = (x.clone() + eps * t).clamp(0., 1.)
+    if x_init is not None:
+        logger.log(f'Using specified initial point.')
+        x_adv = x_init.clone()
 
+    # Set mask for background pixels: this might not be needed for losses
+    # which incorporate `ignore_index` already (e.g. CE), but shouldn't
+    # influence the results.
+    mask_background = y == ignore_index
+    if mask_background.sum() > 0:
+        pct = mask_background.sum().float() / y.numel()
+        logger.log(f'{pct:.2%} pixels are masked out.')
+    mask_background = 1 - mask_background.float()
+    #mask_background = None
     
     x_adv = x_adv.clamp(0., 1.)
     x_best = x_adv.clone()
@@ -544,8 +591,12 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     if loss_name not in ['orth-ce-avg']:
         if loss_name == 'segpgd-loss':
             loss_indiv = criterion_indiv(logits, y, 0, n_iter)
+        elif loss_name in [
+            'mask-norm-corrlog-avg-targeted', 'norm-corrlog-avg-targeted']:
+            loss_indiv = criterion_indiv(logits, y, y_target)
         else:
             loss_indiv = criterion_indiv(logits, y)
+        loss_indiv = pixel_to_img_loss(loss_indiv, mask_background)
         loss = loss_indiv.sum()
         #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
         grad = torch.autograd.grad(loss, [x_adv])[0].detach()
@@ -553,11 +604,16 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         # To potentially use a different loss e.g. no mask.
         if track_loss == 'segpgd-loss':
             loss_indiv = track_loss_fn(logits, y, 0, n_iter)
+        elif track_loss in [
+            'mask-norm-corrlog-avg-targeted', 'norm-corrlog-avg-targeted']:
+            loss_indiv = track_loss_fn(logits, y, y_target)
         else:
             loss_indiv = track_loss_fn(logits, y)
+        loss_indiv = pixel_to_img_loss(loss_indiv, mask_background)
         loss = loss_indiv.sum()
     else:
         loss_indiv, grad = criterion_indiv(logits, y, x_adv)
+        # TODO: check how to add mask for background.
         loss = loss_indiv.sum()
     grad_best = grad.clone()
     x_adv.detach_()
@@ -569,7 +625,9 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
     acc_steps[0] = acc + 0
     pred_best = logits.detach().max(1)[1]  # Track the predictions for best points.
     n_cls = logits.shape[1]
-    m_acc, a_acc, m_iou = compute_iou_acc(pred_best.cpu(), y.cpu(), n_cls)
+    #print(n_cls, logits.shape, pred_best.shape, y.shape)
+    m_acc, a_acc, m_iou = compute_iou_acc(
+        pred_best, y, n_cls, ignore_index=ignore_index)
     loss_best = loss_indiv.detach().clone()
     loss_best_last_check = loss_best.clone()
     reduced_last_check = torch.ones_like(loss_best)
@@ -640,8 +698,12 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         if loss_name not in ['orth-ce-avg']:
             if loss_name == 'segpgd-loss':
                 loss_indiv = criterion_indiv(logits, y, i + 1, n_iter)
+            elif loss_name in [
+                'mask-norm-corrlog-avg-targeted', 'norm-corrlog-avg-targeted']:
+                loss_indiv = criterion_indiv(logits, y, y_target)
             else:
                 loss_indiv = criterion_indiv(logits, y)
+            loss_indiv = pixel_to_img_loss(loss_indiv, mask_background)
             loss = loss_indiv.sum()
             
             #grad += torch.autograd.grad(loss, [x_adv])[0].detach()
@@ -653,11 +715,16 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
             # To potentially use a different loss e.g. no mask.
             if track_loss == 'segpgd-loss':
                 loss_indiv = track_loss_fn(logits, y, i + 1, n_iter)
+            elif track_loss in [
+                'mask-norm-corrlog-avg-targeted', 'norm-corrlog-avg-targeted']:
+                loss_indiv = track_loss_fn(logits, y, y_target)
             else:
                 loss_indiv = track_loss_fn(logits, y)
+            loss_indiv = pixel_to_img_loss(loss_indiv, mask_background)
             loss = loss_indiv.sum()
         else:
             loss_indiv, grad = criterion_indiv(logits, y, x_adv)
+            #loss_indiv = pixel_to_img_loss(loss_indiv, mask_background)
             loss = loss_indiv.sum()
         x_adv.detach_()
         loss_indiv.detach_()
@@ -665,13 +732,18 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
         
         # Save images with lowest average accuracy over pixels.
         pred = logits.detach().max(1)[1] == y
+        # Set pixels of the background to be correctly classified: this
+        # overestimates accuracy but doesn't change the order, hence shouldn't
+        # influence the results.
+        pred[y == ignore_index] = True
         avg_acc = pred.float().view(bs, -1).mean(-1)
         ind_pred = (avg_acc <= acc).nonzero().squeeze()
         acc = torch.min(acc, avg_acc)
         acc_steps[i + 1] = acc + 0
         x_best_adv[ind_pred] = x_adv[ind_pred] + 0.
         pred_best[ind_pred] = logits.detach().max(1)[1][ind_pred] + 0
-        m_acc, a_acc, m_iou = compute_iou_acc(pred_best.cpu(), y.cpu(), n_cls)
+        m_acc, a_acc, m_iou = compute_iou_acc(
+            pred_best, y, n_cls, ignore_index=ignore_index)
 
         if verbose:
             str_stats = ' - step size: {:.5f} - topk: {:.2f}'.format(
@@ -737,9 +809,10 @@ def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
               
     return x_best, acc, loss_best, x_best_adv
 
+
 def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
     loss='ce', verbose=False, n_restarts=1, log_path=None, early_stop=False,
-    eot_iter=0, track_loss=None, use_rs=False):
+    eot_iter=0, track_loss=None, use_rs=False, ignore_index=-1):
     """Run apgd with the option of restarts."""
 
     logger = Logger(log_path)
@@ -748,22 +821,27 @@ def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
     x_adv = x.clone()
     '''x_best = x.clone()
     loss_best = -float('inf') * torch.ones_like(acc).float()
+    '''
     y_target = None
-    fts_target = None
-    if loss in ['dlr-targeted']:
+    #fts_target = None
+    if 'targeted' in loss:
         with torch.no_grad():
             output = model(x)
-        outputsorted = output.sort(-1)[1]
-        n_target_classes = 9 # max number of target classes to use
-    '''
+        outputsorted = output.sort(1)[1]
+        n_target_classes = 21 # max number of target classes to use
     
     for i in range(n_restarts):
         ind = acc > 0
         if acc.sum() > 0:
-            '''if loss in ['dlr-targeted']:
-                y_target = outputsorted[:, -(i % n_target_classes + 2)]
-                y_target = y_target[acc]
-                print(f'target class {i % n_target_classes + 2}')'''
+            if 'targeted' in loss:
+                target_cls = i % n_target_classes + 1
+                y_target = outputsorted[:, -target_cls].clone()
+                mask = (y_target == y).long()
+                other_target = (
+                    outputsorted[:, -target_cls - 1] if i == 0 else
+                    outputsorted[:, -target_cls + 1])
+                y_target = y_target * (1 - mask) + other_target * mask
+                print(f'target class {target_cls}')
             
             x_best_curr, _, loss_curr, x_adv_curr = apgd_train(
                 model, x[ind], y[ind],
@@ -771,10 +849,13 @@ def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
                 eps=eps, norm=norm, logger=logger, early_stop=early_stop,
                 #y_target=y_target, eot_iter=eot_iter
                 track_loss=track_loss,
+                y_target=y_target[ind] if y_target is not None else None,
+                ignore_index=ignore_index,
                 )
             
             with torch.no_grad():
                 pred = model(x_adv_curr).max(1)[1] == y[ind]
+            pred[y[ind] == ignore_index] = True
             acc_curr = pred.float().view(x_adv_curr.shape[0], -1).mean(-1)
             to_update = acc_curr < acc[ind]
             succs = torch.nonzero(ind).squeeze()
@@ -795,12 +876,60 @@ def apgd_restarts(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
             #ind_new = torch.nonzero(acc).squeeze()
             #acc[ind_new] = acc_curr.clone()
             
-            logger.log(f'restart {i + 1} robust accuracy={acc.float().mean():.1%}')
+            warning_ignore_index = ''
+            if (y[ind] == ignore_index).sum() > 0:
+                warning_ignore_index = ' (warning: this is only upper bound on aAcc)'
+            logger.log(
+                f'restart {i + 1} robust accuracy={acc.float().mean():.1%}'
+                f'{warning_ignore_index}')
             
     # old version
     #x_best[~acc] = x_adv[~acc].clone()
     
     return x_adv, _, acc
+
+
+def apgd_largereps(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
+    loss='ce', verbose=False, n_restarts=1, log_path=None, early_stop=False,
+    eot_iter=0, track_loss=None, use_rs=False, ignore_index=-1):
+    """Run apgd with the option of restarts."""
+
+    def _project(z, x, norm, eps):
+
+        if norm == 'Linf':
+            delta = z - x
+            z = x + delta.clamp(-eps, eps)
+        else:
+            raise NotImplementedError()
+
+        return z.clamp(0., 1.)
+
+    logger = Logger(log_path)
+    n_iters = [int(c * n_iter) for c in [.3, .3]]  # .3, .3
+    n_iters.append(n_iter - sum(n_iters))
+    epss = [c * eps for c in [2, 1.5, 1]]
+
+    acc = torch.ones([x.shape[0]], device=x.device) # run on all points
+    x_adv = x.clone()
+    x_init = None
+
+    for inner_it, inner_eps in zip(n_iters, epss):
+        logger.log(f'Using eps={inner_eps:.5f} for {inner_it} iterations.')
+
+        if x_init is not None:
+            x_init = _project(x_init, x, norm, inner_eps)
+
+        _, acc, _, x_init = apgd_train(
+            model, x, y,
+            n_iter=inner_it, use_rs=use_rs, verbose=verbose, loss=loss,
+            eps=inner_eps, norm=norm, logger=logger, early_stop=early_stop,
+            track_loss=track_loss,
+            y_target=None,
+            ignore_index=ignore_index,
+            x_init=x_init)
+
+    return x_init, _, acc
+
 
 
 def pgd_filters(model, x, y, n_iter=10, alpha=.2, loss='ce',
@@ -837,6 +966,133 @@ def pgd_filters(model, x, y, n_iter=10, alpha=.2, loss='ce',
         f.clamp_(0., 1.)
 
     return xf.detach(), f
+
+
+def p_schedule(it, p_init, n_queries, rescale_schedule):
+    """ schedule to decrease the parameter p """
+
+    if rescale_schedule:
+        it = int(it / n_queries * 10000)
+
+    if 10 < it <= 50:
+        p = p_init / 2
+    elif 50 < it <= 200:
+        p = p_init / 4
+    elif 200 < it <= 500:
+        p = p_init / 8
+    elif 500 < it <= 1000:
+        p = p_init / 16
+    elif 1000 < it <= 2000:
+        p = p_init / 32
+    elif 2000 < it <= 4000:
+        p = p_init / 64
+    elif 4000 < it <= 6000:
+        p = p_init / 128
+    elif 6000 < it <= 8000:
+        p = p_init / 256
+    elif 8000 < it:
+        p = p_init / 512
+    else:
+        p = p_init
+
+    return p
+
+
+def square(model, x, y, norm='Linf', eps=8. / 255., n_queries=10,
+    loss='ce', verbose=False, log_path=None, early_stop=False,
+    p_init=.3, rescale_schedule=True, n_cls=21):
+
+    p_selection = partial(p_schedule, p_init=p_init, n_queries=n_queries,
+        rescale_schedule=rescale_schedule)
+
+    logger = Logger(log_path)
+    device = x.device
+    loss_name = loss
+    criterion_indiv = criterion_dict[loss]
+
+    ndims = len(x.shape) - 1
+    bs, c, h, w = x.shape
+    n_features = c * h * w
+
+    def _check_shape(x):
+        return x if len(x.shape) == (ndims + 1) else x.unsqueeze(0)
+
+    def _random_choice(shape):
+        t = 2 * torch.rand(shape, device=device) - 1
+        return torch.sign(t)
+
+    def _random_int(low=0, high=1, shape=[1]):
+        t = low + (high - low) * torch.rand(shape, device=device)
+        return t.long()
+
+    def _get_loss(x, target):
+        with torch.no_grad():
+            pred = model(x)
+        loss = criterion_indiv(pred, target)
+        a_acc = (pred.max(1)[1] == target).view(x.shape[0], -1).float().mean(-1)
+        return a_acc, -1 * loss
+    
+
+    x_best = torch.clamp(
+        x + eps * _random_choice([bs, c, 1, w]), 0., 1.)
+    margin_min, loss_min = _get_loss(x_best, y)
+    count_queries = torch.ones(bs, device=device)
+    s_init = int(math.sqrt(p_init * n_features / c))
+    
+    if (margin_min <= 0.0).all():
+        return x_best, count_queries, margin_min
+    
+    for i_iter in range(n_queries):
+        idx_to_fool = (margin_min > 0.0).nonzero().squeeze()
+        
+        x_curr = _check_shape(x[idx_to_fool])
+        x_best_curr = _check_shape(x_best[idx_to_fool])
+        y_curr = y[idx_to_fool]
+        if len(y_curr.shape) < len(y.shape):
+            y_curr = y_curr.unsqueeze(0)
+        margin_min_curr = margin_min[idx_to_fool]
+        loss_min_curr = loss_min[idx_to_fool]
+        
+        p = p_selection(i_iter)
+        s = max(int(round(math.sqrt(p * n_features / c))), 1)
+        s = min(s, min(h, w))
+        vh = _random_int(0, h - s)
+        vw = _random_int(0, w - s)
+        new_deltas = torch.zeros([c, h, w], device=device)
+        new_deltas[:, vh:vh + s, vw:vw + s] = 2. * eps * _random_choice([c, 1, 1])
+        
+        x_new = x_best_curr + new_deltas
+        x_new = torch.min(torch.max(x_new, x_curr - eps), x_curr + eps)
+        x_new = torch.clamp(x_new, 0., 1.)
+        x_new = _check_shape(x_new)
+        
+        margin, loss = _get_loss(x_new, y_curr)
+
+        # update loss if new loss is better
+        idx_improved = (loss < loss_min_curr).float()
+
+        loss_min[idx_to_fool] = idx_improved * loss + (
+            1. - idx_improved) * loss_min_curr
+
+        # update margin and x_best if new loss is better
+        # or misclassification
+        idx_miscl = (margin < margin_min_curr).float()
+        idx_improved = torch.max(idx_improved, idx_miscl)
+
+        margin_min[idx_to_fool] = idx_improved * margin + (
+            1. - idx_improved) * margin_min_curr
+        idx_improved = idx_improved.reshape([-1,
+            *[1]*len(x.shape[:-1])])
+        x_best[idx_to_fool] = idx_improved * x_new + (
+            1. - idx_improved) * x_best_curr
+        count_queries[idx_to_fool] += 1.
+
+        if verbose:
+            logger.log(
+                f'it={i_iter + 1} loss={loss_min.mean():.5f}'
+                f' aAcc={margin_min.mean():.2%}')
+
+    return x_best, count_queries, margin_min
 
 
 if __name__ == '__main__':

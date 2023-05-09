@@ -58,16 +58,16 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 # apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-EPS = 0.0627 #0.0157, 0.0314, 0.0471, 0.0627
-ITERR = "5iter" #, #"S_mod"
+EPS = 0.0314 #0.0157, 0.0314, 0.0471, 0.0627
+ITERR = "c_init_5iter_mod" #, #"S_mod"
 
 strr = [
-f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
-f"apgd_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
-f"apgd_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_js-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt"
+f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
+f"apgd_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
+f"apgd_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"apgd_js-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"apgd_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt"
 ]
 
 strr1 = [
@@ -78,6 +78,7 @@ f"apgd_segpgd-loss_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
 f"apgd_js-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
 f"apgd_mask-norm-corrlog-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt"
 ]
+
 
 losses_lis = ['mask-ce-avg','segpgd-loss', 'js-avg','mask-norm-corrlog-avg']
 
@@ -101,16 +102,20 @@ def clean_accuracy(
         fold = '5iter_rob_model'
     elif ITERR == '2iter':
         fold = '2iter_rob_model'
-    else:
+    elif ITERR == 'S_mod':
         fold = 'S_model'
+    else:
+        fold = 'clean_model_out'
 
     for i in range(len(strr)):
-        l_output.append(torch.load(BASE_DIR + f"{fold}/" + strr[i]))
-        l_output2.append(torch.load(BASE_DIR + f"{fold}/" +strr[i][:-3]+ "_SD_220.pt"))
-    aa= [l_output, l_output2]
+        l_output.append(torch.load(BASE_DIR + f"{fold}/preds/" + strr[i]))
+        # l_output2.append(torch.load(BASE_DIR + f"{fold}/" +strr[i][:-3]+ "_SD_220.pt"))
+        # print(l_output[-1].size())
+        # print(l_output2[-1].size())
+    aa= [l_output] #, l_output2]
     final_acc_1 = None
     final_acc_2 = None
-    for j in range(2):
+    for j in range(1):
         class_wise_logits = torch.stack(aa[j])
         # class_wise_logits2 = torch.stack(l_output2)
         # class_wise_logits = 
@@ -153,21 +158,25 @@ def clean_accuracy(
             final_acc_2 = (torch.cat(aaacc, dim=-1))
 
     # print(final_acc.size())
-    final_acc_ = torch.cat((final_acc_1, final_acc_2), 1)
-    print(final_acc_.shape)
+    # final_acc_ = torch.cat((final_acc_1, final_acc_2), 1)
+    # print(final_acc_.shape)
+    worse_1 = final_acc_1.min(0)[0].mean()
     at_w_sum1 = final_acc_1.mean(-1)
-    at_w_sum2 = final_acc_2.mean(-1)
-    at_w_sum_full = final_acc_.min(0)[0].mean() #unique(return_counts=True)[1]
+    # at_w_sum2 = final_acc_2.mean(-1)
+    # loss_wise_worse = torch.min(final_acc_1, final_acc_2).mean(-1)
+    # at_w_sum_full = torch.min(final_acc_1, final_acc_2).min(0)[0].mean(-1) #unique(return_counts=True)[1]
     print("Loss-wise: 1", at_w_sum1)
-    print("Loss-wise: 2", at_w_sum2)
-    print("Loss wise - worse", final_acc_.mean(-1))
-    print("Worst case", at_w_sum_full)
-    save_dict = {'worst_case_across_losses': at_w_sum_full,
-                'loss_wise_indiv': at_w_sum1, 
-                'loss_wise_worse': final_acc_.mean(-1),
-                'final_matrix': final_acc_}
+    # print("Loss-wise: 2", at_w_sum2)
+    print("Worse across loss run 1", worse_1)
+    # print("Loss wise - worse", loss_wise_worse)
+    # print("Worst case", at_w_sum_full)
+    save_dict = {'worst_case_across_losses': worse_1,
+                # 'worst_case_run1': worse_1,
+                # 'loss_wise_indiv': at_w_sum1, 
+                'loss_wise_worse': at_w_sum1,
+                'final_matrix': final_acc_1}
 
-    torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{strr[1][-62:-3]}_over_2_seeds.pt")
+    torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{strr[1][11:-3]}.pt")
     # print(strr[0][-62:-3])
     # with open(BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.txt", 'a+') as f:
 

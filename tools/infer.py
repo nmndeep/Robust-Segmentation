@@ -66,8 +66,7 @@ IN_MEAN = [0.485, 0.456, 0.406]
 IN_STD = [0.229, 0.224, 0.225]
 
 def clean_accuracy(
-    model, data_loder, n_batches=-1, n_cls=21, return_output=False,
-    logger=None, ignore_index=-1, return_preds=False):
+    model, data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False):
     """Evaluate accuracy."""
 
     model.eval()
@@ -82,7 +81,7 @@ def clean_accuracy(
     l_output = []
     #print('Using {n_cls} classes and ignore')
 
-    # metrics = Metrics(n_cls, -1, 'cpu')
+    metrics = Metrics(n_cls, -1, 'cpu')
 
     for i, vals in enumerate(data_loder):
         if False:
@@ -96,7 +95,6 @@ def clean_accuracy(
 
             with torch.no_grad():
                 output = model(input)
-            # if return_preds:
             l_output.append(output.cpu())
             #print('fp done')
             #metrics.update(output.cpu(), target)
@@ -146,15 +144,15 @@ def clean_accuracy(
 
     # logger.log(f'mAcc={m_acc:.2%} aAcc={a_acc:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
     #print(acc_cls / n_pxl_cls)
-    l_output = torch.cat(l_output)
     #print(acc_cls.sum() / n_pxl_cls.sum())
+    l_output = torch.cat(l_output)
     stats = {
         'mAcc': m_acc.item(),
         'aAcc': a_acc.item(),
         'mIoU': m_iou.item()}
-    print(stats)
-    # if return_output:
+
     return stats, l_output
+
 
 
 def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
@@ -212,7 +210,7 @@ def get_data(dataset_cfg, test_cfg):
 
     val_loader = torch.utils.data.DataLoader(
         val_data, batch_size=test_cfg['BATCH_SIZE'], shuffle=False,
-        num_workers=0, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g)
+        num_workers=2, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g)
 
     return val_loader
 
@@ -248,18 +246,18 @@ def mask_logits(model: nn.Module, ignore_index: int) -> nn.Module:
     ])
     return nn.Sequential(layers)
 
-
-
+los_pairs = [['mask-ce-avg'], ['segpgd-loss'], ['js-avg'], ['mask-norm-corrlog-avg']]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean.yaml')
-    parser.add_argument('--eps', type=float, default=8.)
+    parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
+    parser.add_argument('--eps', type=float, default=1.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=True)
     parser.add_argument('--attack', type=str, default='segpgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-norm-corrlog-avg, js-avg?')
-    parser.add_argument('--attack_type', type=str, default='apgd', help='pgd or pgd?')
+    parser.add_argument('--attack_type', type=str, default='apgd-larg-eps', help='apgd or apgd-larg-eps?')
+    parser.add_argument('--pair', type=int, default=0, help='0, 1 or 2')
 
     args = parser.parse_args()
 
@@ -283,6 +281,7 @@ if __name__ == '__main__':
     # print(sizeof_fmt(int(val)))
     # print(flop_count_table(flops, max_depth=2))
     # print(flops.by_operator())
+
     model = model.to('cuda')
 
     val_data_loader = get_data(dataset_cfg, test_cfg)
@@ -298,13 +297,30 @@ if __name__ == '__main__':
     preds = []
     lblss = []
 
-    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=5, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
     # print(clean_stats)
     # exit()
-    for ite, ls in enumerate([args.attack]):
-        args.attack = ls #'segpgd-loss' 
+    if '5iter' and 'ROB' in test_cfg['BACKBONE']:
+        fold = '5iter_rob_model'
+        appen = '5iter'
+    elif '2iter' and 'ROB' in test_cfg['BACKBONE']: 
+        fold = '2iter_rob_model'
+        appen = '2iter'
+    elif 'ConvNeXt-S' and 'ROB' in test_cfg['BACKBONE']:
+        fold = 'S_model'
+        appen = 'S'
+    else:
+        fold = 'clean_model_out'
+        if '5iter' in test_cfg['BACKBONE']:
+            appen = 'c_init_5iter'
+        else:
+            appen = 'c_init_2iter'
+
+    for ite, ls in enumerate(los_pairs[args.pair]):
+        # args.eps = ls #'segpgd-loss' 
+        args.attack = ls
         if args.adversarial:
-            strr = f"adversarial_{test_cfg['NAME']}_{args.attack_type}__c_init"
+            strr = f"adversarial_{test_cfg['NAME']}_{args.attack_type}_{fold}_SD_{SEED}"
         else:
             strr = f"clean_{test_cfg['NAME']}"
         # args.eps = ls
@@ -317,28 +333,45 @@ if __name__ == '__main__':
                 args.eps /= 255.
 
             attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=100, los=args.attack) if args.attack_type == 'pgd' else None
-
-            attack_fn = partial(
-                attacker.apgd_restarts,
-                norm=args.norm,
-                eps=args.eps,
-                n_iter=args.n_iter,
-                n_restarts=1,
-                use_rs=True,
-                loss=args.attack if args.attack else 'ce-avg',
-                verbose=True,
-                track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',    
-                log_path=None,
-                ) if args.attack_type == 'apgd' else partial(attack_pgd.adv_attack)
-
+            if args.attack_type == 'apgd':
+                attack_fn = partial(
+                    attacker.apgd_restarts,
+                    norm=args.norm,
+                    eps=args.eps,
+                    n_iter=args.n_iter,
+                    n_restarts=1,
+                    use_rs=True,
+                    loss=args.attack if args.attack else 'ce-avg',
+                    verbose=True,
+                    track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',    
+                    log_path=None,
+                    early_stop=True
+                    )
+            else:
+                args.n_iter = 300
+                attack_fn =  partial(
+                    attacker.apgd_largereps,
+                    norm=args.norm,
+                    eps=args.eps,
+                    n_iter=args.n_iter,
+                    n_restarts=1, #args.n_restarts,
+                    use_rs=True,
+                    loss=args.attack if args.attack else 'ce-avg',
+                    verbose=True,
+                    track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',
+                    log_path=None,
+                    early_stop=True)
             adv_loader = evaluate(val_data_loader, model, attack_fn, n_batches, args)
 
         if args.adversarial:
-            adv_stats, l_outs = clean_accuracy(model, adv_loader, 5, n_cls=dataset_cfg['N_CLS'], ignore_index=-1)
-            # torch.save(l_outs, cfg['SAVE_DIR'] + "/test_results/output_logits_new/" + f"{args.attack_type}_{args.attack}_S_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}.pt" )
-            exit()
+            adv_stats, l_outs = clean_accuracy(model, adv_loader, -1, n_cls=dataset_cfg['N_CLS'], ignore_index=-1)
+            torch.save(l_outs, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}.pt")
+            adv = torch.cat([x for x, y in adv_loader], dim=0).cpu()
+            data_dict = {'adv': adv}
+            print(data_dict['adv'].shape)
+            torch.save(data_dict, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/images/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}.pt")
 
-        with open(cfg['SAVE_DIR'] + "/test_results/main_results/"+ f"{strr}_numbers_{args.eps:.4f}_{test_cfg['NAME']}_.txt", 'a+') as f:
+        with open(cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/logs/"+ f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}.txt", 'a+') as f:
             if ite == 0:
                 f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
                 f.write(f"Clean results: {clean_stats}\n")
@@ -349,9 +382,4 @@ if __name__ == '__main__':
                 f.write(f"Adversarial results: {adv_stats}\n") 
                 # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
             f.write("\n")
-        console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + "/test_results/"+ f"{strr}_numbers_{test_cfg['NAME']}.txt")
-
-        # if args.store_data:
-        #     save_dict = {'images': torch.cat(preds), 'labels': torch.cat(lblss)}
-        #     torch.save(save_dict, cfg['SAVE_DIR'] + f"/test_results/adv_data_eps_{args.eps: .4f}_{str(cfg['MODEL']['BACKBONE'])}.pt")
-        #     console.rule(f"[violet]Adversarial images and labels stored: {cfg['SAVE_DIR']}" + f"/test_results/adv_data_eps_{args.eps: .4f}_iter_{args.n_iter}_{str(cfg['MODEL']['BACKBONE'])}.pt")
+        console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}")
