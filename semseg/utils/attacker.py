@@ -930,8 +930,6 @@ def apgd_largereps(model, x, y, norm='Linf', eps=8. / 255., n_iter=10,
 
     return x_init, _, acc
 
-
-
 def pgd_filters(model, x, y, n_iter=10, alpha=.2, loss='ce',
     verbose=False, init_f=None, n_cls=10, alpha_reg=0.):
     
