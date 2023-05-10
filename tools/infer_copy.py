@@ -178,7 +178,6 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
     return adv_loader
 
 
-
 def get_data(dataset_cfg, test_cfg):
 
     if str(test_cfg['NAME']) == 'pascalvoc':
@@ -246,17 +245,18 @@ def mask_logits(model: nn.Module, ignore_index: int) -> nn.Module:
     ])
     return nn.Sequential(layers)
 
-los_pairs = [['mask-ce-avg'], ['segpgd-loss'], ['js-avg'], ['mask-norm-corrlog-avg']]
+los_pairs = [['ce-avg', 'mask-ce-avg'], ['segpgd-loss', 'cospgd-loss'], ['js-avg', 'mask-norm-corrlog-avg']]
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
+    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean_5iter.yaml')
     parser.add_argument('--eps', type=float, default=1.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=True)
     parser.add_argument('--attack', type=str, default='segpgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-norm-corrlog-avg, js-avg?')
-    parser.add_argument('--attack_type', type=str, default='apgd-larg-eps', help='apgd or apgd-larg-eps?')
+    parser.add_argument('--attack_type', type=str, default='pgd', help='apgd or apgd-larg-eps?')
     parser.add_argument('--pair', type=int, default=0, help='0, 1 or 2')
 
     args = parser.parse_args()
@@ -272,15 +272,7 @@ if __name__ == '__main__':
     if model_norm:
         print('Add normalization layer.')   
         model = normalize_model(model, IN_MEAN, IN_STD)
-    # model = mask_logits(model, 0)
-    # model.eval()
-    # inpp = torch.rand(1, 3, 512, 512)
-    # flops = FlopCountAnalysis(model, inpp)
-    # val = flops.total()
-    # print(val)
-    # print(sizeof_fmt(int(val)))
-    # print(flop_count_table(flops, max_depth=2))
-    # print(flops.by_operator())
+
 
     model = model.to('cuda')
 
@@ -297,7 +289,7 @@ if __name__ == '__main__':
     preds = []
     lblss = []
 
-    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
     # print(clean_stats)
     # exit()
     if '5iter' and 'ROB' in test_cfg['MODEL_PATH']:
@@ -314,11 +306,15 @@ if __name__ == '__main__':
         print(test_cfg['MODEL_PATH'])
         if '5iter_300ep' in test_cfg['MODEL_PATH']:
             appen = 'c_init_5iter'
-        elif '5iter_100' in test_cfg['MODEL_PATH']:
+        elif '5iter_100ep' in test_cfg['MODEL_PATH']:
             appen = 'c_init_5iter_100'
+        elif '5iter_50ep' in test_cfg['MODEL_PATH']:
+            appen = 'c_init_5iter_50'
         else:
             appen = 'c_init_2iter'
-
+        print(appen)
+    # print('Exiting')
+    # exit()
     for ite, ls in enumerate(los_pairs[args.pair]):
         # args.eps = ls #'segpgd-loss' 
         args.attack = ls
@@ -350,7 +346,7 @@ if __name__ == '__main__':
                     log_path=None,
                     early_stop=True
                     )
-            else:
+            elif args.attack_type == 'apgd-larg-eps':
                 args.n_iter = 300
                 attack_fn =  partial(
                     attacker.apgd_largereps,
@@ -364,6 +360,10 @@ if __name__ == '__main__':
                     track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',
                     log_path=None,
                     early_stop=True)
+            else:
+                # the setting for just PGD attack
+                attack_fn = partial(attack_pgd.adv_attack)
+
             adv_loader = evaluate(val_data_loader, model, attack_fn, n_batches, args)
 
         if args.adversarial:

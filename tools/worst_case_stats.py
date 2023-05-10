@@ -58,25 +58,21 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 # apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-EPS = 0.0314 #0.0157, 0.0314, 0.0471, 0.0627
-ITERR = "c_init_5iter_mod" #, #"S_mod"
-
+EPS = 0.0157 #0.0157, 0.0314, 0.0471, 0.0627
+ITERR = "5iter_mod" #, #"S_mod"
+ATTACK = 'apgd-larg-eps'
 strr = [
-f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
-f"apgd_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
-f"apgd_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"apgd_js-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"apgd_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt"
+# f"{ATTACK}_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
+f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt", 
+f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt",
+# f"{ATTACK}_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"apgd_js-avg_5iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt",
+f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt"
 ]
 
 strr1 = [
-# f"apgd_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt", 
-f"apgd_mask-ce-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt", 
-f"apgd_segpgd-loss_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
-# f"apgd_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt",
-f"apgd_js-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt",
-f"apgd_mask-norm-corrlog-avg_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-S_CVST_ROB_SD_220.pt"
+"apgd-larg-eps_mask-ce-avg_5iter_mod_rob_mod_0.0314_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt",
+"apgd_mask-norm-corrlog-avg_5iter_rob_mod_0.0314_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB.pt"
 ]
 
 
@@ -98,7 +94,7 @@ def clean_accuracy(
     l_output = []
     l_output2 = []
 
-    if ITERR == '5iter':
+    if ITERR == '5iter_mod':
         fold = '5iter_rob_model'
     elif ITERR == '2iter':
         fold = '2iter_rob_model'
@@ -165,18 +161,23 @@ def clean_accuracy(
     # at_w_sum2 = final_acc_2.mean(-1)
     # loss_wise_worse = torch.min(final_acc_1, final_acc_2).mean(-1)
     # at_w_sum_full = torch.min(final_acc_1, final_acc_2).min(0)[0].mean(-1) #unique(return_counts=True)[1]
+    # print("Worse case for 8/255 across large-eps mask-ce and 100 mask-norm")
     print("Loss-wise: 1", at_w_sum1)
     # print("Loss-wise: 2", at_w_sum2)
+
     print("Worse across loss run 1", worse_1)
+    for p in [[0,1,2], [0,2,3], [0, 3], [0,1, 3]]:
+        print("Pair-wise worse for", p)
+        print(final_acc_1[p].min(0)[0].mean())
     # print("Loss wise - worse", loss_wise_worse)
     # print("Worst case", at_w_sum_full)
-    save_dict = {'worst_case_across_losses': worse_1,
-                # 'worst_case_run1': worse_1,
-                # 'loss_wise_indiv': at_w_sum1, 
-                'loss_wise_worse': at_w_sum1,
-                'final_matrix': final_acc_1}
+    # save_dict = {'worst_case_across_losses': worse_1,
+    #             # 'worst_case_run1': worse_1,
+    #             # 'loss_wise_indiv': at_w_sum1, 
+    #             'loss_wise_worse': at_w_sum1,
+    #             'final_matrix': final_acc_1}
 
-    torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{strr[1][11:-3]}.pt")
+    # torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{ATTACK}_{EPS}_pascalvoc_{ITERR}" + strr[0][-30:-3] + ".pt")
     # print(strr[0][-62:-3])
     # with open(BASE_DIR + f"WORST_CASE_{strr[0][-62:-3]}.txt", 'a+') as f:
 
