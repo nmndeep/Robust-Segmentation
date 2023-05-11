@@ -59,7 +59,7 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 
 
 # DATAS = 'ADE'
-EPS = 0.0157 #0.0157, 0.0314, 0.0471, 0.0627
+EPS = 0.0314 #0.0157, 0.0314, 0.0471, 0.0627
 ITERR = "c_init_5iter_100_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
 strr = [
@@ -143,9 +143,9 @@ def clean_accuracy(
                     n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
 
                     intersection_all_ = intersection_all * ind
-                    int_cls[:, :,  cl] = intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(2)
+                    int_cls[:, :,  cl] = intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
                     union_cls[:, :,  cl] = (ind.view(ind.shape[0], ind.shape[1], -1).float().sum(-1) + (pred == cl).view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
-                                  - intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(2))
+                                  - intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1))
 
                 tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
                 # print(tenss.size())
@@ -167,14 +167,20 @@ def clean_accuracy(
     print(final_acc_1.min(0)[1].size())
     ious = torch.cat(ious, dim=1)
     unions = torch.cat(unions, dim=1)
-    wrs = []
-    # for i in
-    worse_ious = torch.cat([torch.index_select(ious[:, i, :], 0, final_acc_1.min(0)[1][i]) for i in range(ious.size(1))])
-    worse_unios = torch.cat([torch.index_select(unions[:, i, :], 0, final_acc_1.min(0)[1][i]) for i in range(unions.size(1))])
+    wrs_i = []
+    wrs_u = []
+    for i in range(ious.shape[1]):
+        wrs_i.append(ious[final_acc_1.min(0)[1][i]])
+        wrs_u.append(unions[final_acc_1.min(0)[1][i]])
+    worse_ious = torch.cat(wrs_i, dim=0)
+    worse_unios = torch.cat(wrs_u, dim=0)
+    # worse_ious = torch.cat([torch.index_select(ious[:, i], 0, final_acc_1.min(0)[1][i]) for i in range(ious.size(1))])
+    # worse_unios = torch.cat([torch.index_select(unions[:, i], 0, final_acc_1.min(0)[1][i]) for i in range(unions.size(1))])
     # worse_ious = torch.cat(ious, dim=1)[:, final_acc_1.min(0)[1]]
     # worse_unios = torch.cat(unions, dim=1)[:, final_acc_1.min(0)[1]]
-    # print(worse_ious.size(), worse_unios.size())
+    print(worse_ious.size(), worse_unios.size())
     # sum over classes and compute miou
+    # exit()
     worse_miou = (worse_ious.sum(-1) / worse_unios.sum(-1)).mean() 
 
     worse_1 = final_acc_1.min(0)[0].mean()
@@ -303,4 +309,4 @@ if __name__ == '__main__':
         # model = mask_logits(model, 0)
         model = model.to('cuda')
         val_data_loader = get_data(dataset_cfg, test_cfg)
-        clean_stats = clean_accuracy(val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+        clean_stats = clean_accuracy(val_data_loader, n_batches=10, n_cls=test_cfg['N_CLS'], ignore_index=-1)
