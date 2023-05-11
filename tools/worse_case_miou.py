@@ -58,19 +58,23 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 # apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-EPS = 0.0471 #0.0157, 0.0314, 0.0471, 0.0627
-ITERR = "S_mod" #, #"S_mod"
+# DATAS = 'ADE'
+EPS = 0.0157 #0.0157, 0.0314, 0.0471, 0.0627
+ITERR = "c_init_5iter_100_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
 strr = [
-f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt", 
-f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt",
-# f"{ATTACK}_js-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt",
-# f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt"
+f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
+f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"{ATTACK}_js-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
+f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt"
 ]
 
 losses_lis = ['mask-ce-avg','segpgd-loss', 'js-avg','mask-norm-corrlog-avg']
 
+pair_idx = [['ma-ce+seg+js'], ['ma-ce+js+ma-nm'], ['ma-ce+ma-mn'], ['ma-ce+seg+ma-nm']]
+# exit()
 
+# print(f"WORST_CASE_{ATTACK}_{EPS}_{ITERR}" + strr[0][strr[0].find("300")+3:])
 # exit()
 def clean_accuracy(
     data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False):
@@ -159,38 +163,43 @@ def clean_accuracy(
         else:
             final_acc_2 = (torch.cat(aaacc, dim=-1))
     #select worse loss depending on aAcc
-    worse_ious = torch.cat(ious, dim=1)[[final_acc_1.min(0)[1]]]
-    worse_unios = torch.cat(unions, dim=1)[[final_acc_1.min(0)[1]]]
-    print(worse_ious.size(), worse_unios.size())
+    print(ious[0].size())
+    print(final_acc_1.min(0)[1].size())
+    ious = torch.cat(ious, dim=1)
+    unions = torch.cat(unions, dim=1)
+    wrs = []
+    # for i in
+    worse_ious = torch.cat([torch.index_select(ious[:, i, :], 0, final_acc_1.min(0)[1][i]) for i in range(ious.size(1))])
+    worse_unios = torch.cat([torch.index_select(unions[:, i, :], 0, final_acc_1.min(0)[1][i]) for i in range(unions.size(1))])
+    # worse_ious = torch.cat(ious, dim=1)[:, final_acc_1.min(0)[1]]
+    # worse_unios = torch.cat(unions, dim=1)[:, final_acc_1.min(0)[1]]
+    # print(worse_ious.size(), worse_unios.size())
     # sum over classes and compute miou
     worse_miou = (worse_ious.sum(-1) / worse_unios.sum(-1)).mean() 
-    # print(final_acc.size())
-    # final_acc_ = torch.cat((final_acc_1, final_acc_2), 1)
-    # print(final_acc_.shape)
+
     worse_1 = final_acc_1.min(0)[0].mean()
     at_w_sum1 = final_acc_1.mean(-1)
-    # at_w_sum2 = final_acc_2.mean(-1)
-    # loss_wise_worse = torch.min(final_acc_1, final_acc_2).mean(-1)
-    # at_w_sum_full = torch.min(final_acc_1, final_acc_2).min(0)[0].mean(-1) #unique(return_counts=True)[1]
-    # print("Worse case for 8/255 across large-eps mask-ce and 100 mask-norm")
+ 
     print("Loss-wise: Acc", at_w_sum1)
     print("Worse Acc across run", worse_1)
     print("Worse miou across run", worse_miou.item())
     pairs = []
-    for p in [[0,1,2], [0,2,3], [0, 3], [0,1, 3]]:
+    pair_lis =  [[0,1,2], [0,2,3], [0, 3], [0,1,3]]
+    for p in pair_lis:
         print("Pair-wise worse for", p)
         print(final_acc_1[p].min(0)[0].mean())
         pairs.append(final_acc_1[p].min(0)[0].mean().item())
 
-    save_dict = {'worst_Acc_across_losses': worse_1,
+    save_dict = {'worst_Acc_across_4_losses': worse_1,
                 'worst_Acc_indiv': at_w_sum1, 
+                'pair_wise_key': pair_idx,
                 'pair_wise_Acc': pairs, 
                 'final_matrix_Acc': final_acc_1,
                 'worse_miou': worse_miou,
                 'worse_inter_per_img': worse_ious,
                 'worse_union_per_img': worse_unios}
 
-    torch.save(save_dict, BASE_DIR + f"/{fold}/logs/WORST_CASE_{ATTACK}_{EPS}_pascalvoc_{ITERR}" + strr[0][-30:-3] + ".pt")
+    torch.save(save_dict, BASE_DIR + f"/{fold}/worse_cases/WORST_CASE_{ATTACK}_{EPS}_{ITERR}" + strr[0][strr[0].find("300")+3:])
 
 
 def get_data(dataset_cfg, test_cfg):
@@ -294,4 +303,4 @@ if __name__ == '__main__':
         # model = mask_logits(model, 0)
         model = model.to('cuda')
         val_data_loader = get_data(dataset_cfg, test_cfg)
-        clean_stats = clean_accuracy(val_data_loader, n_batches=3, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+        clean_stats = clean_accuracy(val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
