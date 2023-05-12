@@ -59,7 +59,7 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 
 
 # DATAS = 'ADE'
-EPS = 0.0314 #0.0157, 0.0314, 0.0471, 0.0627
+EPS = 0.0157 #0.0157, 0.0314, 0.0471, 0.0627
 ITERR = "c_init_5iter_100_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
 strr = [
@@ -76,6 +76,61 @@ pair_idx = [['ma-ce+seg+js'], ['ma-ce+js+ma-nm'], ['ma-ce+ma-mn'], ['ma-ce+seg+m
 
 # print(f"WORST_CASE_{ATTACK}_{EPS}_{ITERR}" + strr[0][strr[0].find("300")+3:])
 # exit()
+
+
+def get_worst_case_stats(preds, targets, bs=10, n_cls=21):
+    """
+    preds: [n_losses, n_imgs, h, w]
+    targets: [n_imgs, h, w]
+    bs: int
+    """
+    n_batches = math.ceil(preds.shape[1] / bs)
+    n_losses = preds.shape[0]
+    l_accs = []
+    l_unions = []
+    l_inters = []
+    
+    for i in range(n_batches):
+        preds_curr = preds[:, bs * i:bs * (i + 1)]
+        targets_curr = targets[bs * i:bs * (i + 1)].unsqueeze(0)
+        n_imgs = preds_curr.shape[1]
+        
+        is_correct = preds_curr == targets_curr
+        
+        inters = torch.zeros([n_losses, n_imgs, n_cls])
+        unions = torch.zeros_like(inters)
+        accs = torch.zeros_like(inters)
+        counts = torch.zeros_like(accs)
+        
+        for cl in range(n_cls):
+            is_class = targets_curr == cl
+            is_predicted_class = preds_curr == cl
+            
+            accs[:, :, cl] += (is_correct * is_class).view(n_losses, n_imgs, -1).sum(-1)  # TP, same as intersection
+            counts[:, :, cl] += is_class.view(1, n_imgs, -1).sum(-1)  
+            
+            inters[:, :, cl] += (is_correct * is_class).view(n_losses, n_imgs, -1).sum(-1)
+            unions[:, :, cl] += (
+                counts[:, :, cl]  # TP + FN
+                + is_predicted_class.view(n_losses, n_imgs, -1).sum(-1)  # TP + FP
+                - inters[:, :, cl]  # - TP
+            )  # TP + FN + TP + FP - TP = TP + FN + FP
+            
+        l_accs.append(accs.sum(2) / counts.sum(2))  # sum over classes -> [n_losses, n_imgs]
+        l_inters.append(inters)
+        l_unions.append(unions)
+    
+    vals = (
+        torch.cat(l_accs, dim=1),  # [n_losses, n_imgs]
+        torch.cat(l_inters, dim=1),  # [n_losses, n_imgs, n_cls]
+        torch.cat(l_unions, dim=1))  # [n_losses, n_imgs, n_cls]
+    
+    for val in vals:
+        print(val.shape)
+    
+    return vals
+
+
 def clean_accuracy(
     data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False):
     """Evaluate accuracy."""
@@ -128,6 +183,7 @@ def clean_accuracy(
                 # pointwise tensors for worst-case miou
                 int_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
                 union_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+                counts = torch.zeros_like(acc_cls)
 
                 output = class_wise_logits[:, i*BS:i*BS+BS]
                 pred = output.max(2)[1].cpu()
@@ -143,12 +199,13 @@ def clean_accuracy(
                     n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
 
                     intersection_all_ = intersection_all * ind
-                    int_cls[:, :,  cl] = intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
-                    union_cls[:, :,  cl] = (ind.view(ind.shape[0], ind.shape[1], -1).float().sum(-1) + (pred == cl).view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
-                                  - intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1))
+                    int_cls[:, :,  cl] += intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
+                    union_cls[:, :,  cl] += n_pxl_cls[:, :, cl] + (pred == cl).view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1) - int_cls[:, :, cl]
 
                 tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
                 # print(tenss.size())
+                ind = (n_pxl_cls > 0)
+                print(ind.size())
                 aaacc.append(tenss)
                 ious.append(int_cls)
                 unions.append(union_cls)
@@ -169,19 +226,20 @@ def clean_accuracy(
     unions = torch.cat(unions, dim=1)
     wrs_i = []
     wrs_u = []
-    for i in range(ious.shape[1]):
-        wrs_i.append(ious[final_acc_1.min(0)[1][i]])
-        wrs_u.append(unions[final_acc_1.min(0)[1][i]])
+    # print(ious.size())
+    print("loss-wise mious:", (ious.sum(1)/unions.sum(1)).mean(-1))
+    indx = final_acc_1.min(0)[1]
+    for i in range(indx.size(0)):
+        wrs_i.append(ious[indx[i], i, :].unsqueeze(0))
+        wrs_u.append(unions[indx[i], i, :].unsqueeze(0))
+
     worse_ious = torch.cat(wrs_i, dim=0)
     worse_unios = torch.cat(wrs_u, dim=0)
-    # worse_ious = torch.cat([torch.index_select(ious[:, i], 0, final_acc_1.min(0)[1][i]) for i in range(ious.size(1))])
-    # worse_unios = torch.cat([torch.index_select(unions[:, i], 0, final_acc_1.min(0)[1][i]) for i in range(unions.size(1))])
-    # worse_ious = torch.cat(ious, dim=1)[:, final_acc_1.min(0)[1]]
-    # worse_unios = torch.cat(unions, dim=1)[:, final_acc_1.min(0)[1]]
+  
     print(worse_ious.size(), worse_unios.size())
     # sum over classes and compute miou
     # exit()
-    worse_miou = (worse_ious.sum(-1) / worse_unios.sum(-1)).mean() 
+    worse_miou = (worse_ious.sum(0) / worse_unios.sum(0)).mean() 
 
     worse_1 = final_acc_1.min(0)[0].mean()
     at_w_sum1 = final_acc_1.mean(-1)
@@ -197,11 +255,12 @@ def clean_accuracy(
         pairs.append(final_acc_1[p].min(0)[0].mean().item())
 
     save_dict = {'worst_Acc_across_4_losses': worse_1,
-                'worst_Acc_indiv': at_w_sum1, 
+                'worst_Acc_per_loss': at_w_sum1, 
                 'pair_wise_key': pair_idx,
                 'pair_wise_Acc': pairs, 
                 'final_matrix_Acc': final_acc_1,
-                'worse_miou': worse_miou,
+                'worse_miou_across_4_losses': worse_miou,
+                'miou_per_loss': (ious.sum(1)/unions.sum(1)).mean(-1)
                 'worse_inter_per_img': worse_ious,
                 'worse_union_per_img': worse_unios}
 
@@ -309,4 +368,4 @@ if __name__ == '__main__':
         # model = mask_logits(model, 0)
         model = model.to('cuda')
         val_data_loader = get_data(dataset_cfg, test_cfg)
-        clean_stats = clean_accuracy(val_data_loader, n_batches=10, n_cls=test_cfg['N_CLS'], ignore_index=-1)
+        clean_stats = clean_accuracy(val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
