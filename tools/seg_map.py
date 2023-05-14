@@ -179,24 +179,46 @@ class SemSeg:
         self.postprocess(image.cpu(), label.cpu(), seg_map, self.n_cls)
 
 
-def get_val_data(dataset_cfg, test_cfg):
+def get_data(dataset_cfg, test_cfg):
 
-    input_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize([.485, .456, .406], [.229, .224, .225]),
-    ])
-    # dataset and dataloader
-    data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': test_cfg['IMAGE_SIZE']}
+    if str(test_cfg['NAME']) == 'pascalvoc':
+        data_dir = '../VOCdevkit/'
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=512,
+            crop_size=(473, 473))
+
+    elif str(test_cfg['NAME']) == 'pascalaug':
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=512,
+            crop_size=(473, 473))
+
+    elif str(test_cfg['NAME']).lower() == 'ade20k':
+        val_data = get_segmentation_dataset(test_cfg['NAME'],
+            root=dataset_cfg['ROOT'],
+            split='val',
+            transform=torchvision.transforms.ToTensor(),
+            base_size=520,
+            crop_size=(512, 512))
+    else:
+        raise ValueError(f'Unknown dataset.')
 
 
-    val_dataset = get_segmentation_dataset(dataset_cfg['NAME'], root=dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
+    # val_loader = torch.utils.data.DataLoader(
+    #     val_data, batch_size=48, shuffle=False,
+    #     num_workers=1, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g)
 
-    return val_dataset
+    return val_data
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/ade20k_convnext_vena.yaml')
+    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean.yaml')
     parser.add_argument('--adversarial-data', action='store_true', help='PGD data?', default=False)
 
     args = parser.parse_args()
@@ -206,9 +228,6 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    # model = eval(model_cfg['NAME'])(model_cfg['BACKBONE'], dataset_cfg['N_CLS'],None)
-    # model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
-    # model = model.to('cuda')
     if not args.adversarial_data:
         val_data = get_val_data(dataset_cfg, test_cfg)
     else:

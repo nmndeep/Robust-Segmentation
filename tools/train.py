@@ -66,7 +66,6 @@ class Trainer:
 
         self.save_dir = str(cfg['SAVE_DIR'])
 
-      
         
         if self.gpu == 0:
             self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK'])+ '_' + str(self.train_cfg['LOSS_FN']) + str(cfg['ADDENDUM'])

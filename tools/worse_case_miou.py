@@ -58,15 +58,17 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 # apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-# DATAS = 'ADE'
-EPS = 0.0314 #0.0157, 0.0314, 0.0471, 0.0627
-ITERR = "c_init_5iter_100_mod" #, #"S_mod"
+DATAS = 'pascalvoc' # 'pascalvoc'
+EPS = 0.0627 #0.0157, 0.0314, 0.0471, 0.0627
+ITERR = "S_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
+n_it = 300
+# apgd-larg-eps_js-avg_5iter_mod_rob_mod_0.0157_n_it_500_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225_lx500
 strr = [
-f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
-f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"{ATTACK}_js-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_SD_225.pt"
+f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt", 
+f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt",
+f"{ATTACK}_js-avg_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt", 
+f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt"
 ]
 
 losses_lis = ['mask-ce-avg','segpgd-loss', 'js-avg','mask-norm-corrlog-avg']
@@ -100,12 +102,19 @@ def clean_accuracy(
         fold = 'S_model'
     else:
         fold = 'clean_model_out'
-
+    # fold = '5iter_ade'
+    # fold = '2iter_ade'
+    print("before loading pt files")
     for i in range(len(strr)):
+        # tens1 = torch.load(BASE_DIR + f"{fold}/preds/" + strr[i])
+        # print(tens1.size())
+        # tenss = tens1.max(1)[1]
+        # torch.save(tenss, BASE_DIR + f"{fold}/preds/" + strr[i][:-3]+"_MAX.pt")
         l_output.append(torch.load(BASE_DIR + f"{fold}/preds/" + strr[i]))
         # l_output2.append(torch.load(BASE_DIR + f"{fold}/" +strr[i][:-3]+ "_SD_220.pt"))
         # print(l_output[-1].size())
-        # print(l_output2[-1].size())
+    # exit()
+    print("after loading pt files")
     aa= [l_output] #, l_output2]
     final_acc_1 = None
     final_acc_2 = None
@@ -132,9 +141,10 @@ def clean_accuracy(
                 union_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
                 counts = torch.zeros_like(acc_cls)
 
-                output = class_wise_logits[:, i*BS:i*BS+BS]
+                # pred = class_wise_logits[:, i*BS:i*BS+BS].cpu()
+                output = class_wise_logits[:, i*BS:i*BS+BS].cpu()
                 pred = output.max(2)[1].cpu()
-                pred[:, (target == ignore_index)] = ignore_index
+                # pred[:, (target == ignore_index)] = ignore_index
                 acc_curr = pred == target
                 intersection_all = pred == target
                 # print("intersection-all", intersection_all.size())
@@ -150,7 +160,7 @@ def clean_accuracy(
                     union_cls[:, :,  cl] += n_pxl_cls[:, :, cl] + (pred == cl).view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1) - int_cls[:, :, cl]
 
                 tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
-                # print(tenss.size())
+                print(tenss.size())
                 ind = (n_pxl_cls > 0)
                 # print(ind.size())
                 aaacc.append(tenss)
@@ -209,7 +219,7 @@ def clean_accuracy(
                 'worse_miou_across_4_losses': worse_miou,
                 'miou_per_loss': (ious.sum(1)/unions.sum(1)).mean(-1),
                 'inter_per_img_per_loss': ious,
-                'union_per_img_per_loss': unios}
+                'union_per_img_per_loss': unions}
 
     torch.save(save_dict, BASE_DIR + f"/{fold}/worse_cases/WORST_CASE_{ATTACK}_{EPS}_{ITERR}" + strr[0][strr[0].find("300")+3:])
 
@@ -246,7 +256,7 @@ def get_data(dataset_cfg, test_cfg):
 
     val_loader = torch.utils.data.DataLoader(
         val_data, batch_size=48, shuffle=False,
-        num_workers=1, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g)
+        num_workers=1, pin_memory=True, sampler=None, worker_init_fn =seed_worker, generator=g, drop_last=True)
 
     return val_loader
 
