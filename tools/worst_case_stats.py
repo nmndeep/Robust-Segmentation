@@ -58,16 +58,16 @@ BASE_DIR = '/data/naman_deep_singh/model_zoo/seg_models/test_results/output_logi
 # apgd_mask-ce-avg_5iter_rob_mod_0.0471_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt
 
 
-EPS = 0.0157 #0.0157, 0.0314, 0.0471, 0.0627
+EPS = 0.0627 #0.0157, 0.0314, 0.0471, 0.0627
 ITERR = "5iter_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
 strr = [
 # f"{ATTACK}_ce-avg_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt", 
-f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt", 
-f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt",
+f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt", 
+f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt",
 # f"{ATTACK}_cospgd-loss_{ITERR}_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_SD_225.pt",
-f"apgd_js-avg_5iter_rob_mod_{EPS}_n_it_100_pascalvoc_ConvNeXt-T_CVST_ROB_SD_220.pt",
-f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225.pt"
+f"{ATTACK}_js-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt",
+f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_300_pascalvoc_ConvNeXt-S_CVST_ROB_SD_225.pt"
 ]
 
 strr1 = [
