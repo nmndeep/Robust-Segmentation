@@ -208,7 +208,58 @@ class Pgd_Attack():
     def adv_attack(self, model, X, y): # Untargetted Attack
         
         model.eval()
+        # x_best_adv = x_adv.clone()
+        delta = torch.zeros_like(X).cuda()
+        delta.requires_grad = True
+        running_best_loss = torch.zeros((X.size(0))).cuda()
+        # trg = y.squeeze(1)
+        best_delta = torch.zeros_like(X)
+        for t in range(self.num_iter):
+            lam_t = t / 2 * self.num_iter
+            logits = model(input=(X + delta).clamp(0., 1.))
+            # print(t)
+            if self.los_name == 'segpgd-loss':
+                loss = self.loss_fn(logits, y.long(), t, self.num_iter)
+            else:
+                loss = self.loss_fn(logits, y.long())
 
+            ind_pred = (loss.detach().clone() >= running_best_loss).nonzero().squeeze()
+            # print(ind_pred)
+            # print(loss[ind_pred[2]])
+            running_best_loss[ind_pred] = loss[ind_pred].detach().clone() + 0. #.detach().clone()
+            # print(running_best_loss[ind_pred].size())
+            # print(delta[ind_pred].data.size())
+            loss = loss.sum()
+            loss.backward()
+            grad = delta.grad.detach()
+            grad_sign = torch.sign(grad)
+            delta.data = (delta + self.alpha * grad_sign)
+            delta.data = (X + delta.data).clamp(0., 1.) - X
+            delta.data = delta.data.clamp(-self.epsilon, self.epsilon)
+            delta.grad.zero_()
+            delta.detach()
+            best_delta[ind_pred] = delta[ind_pred].data #.detach().clone()
+
+        x_adv = (X + best_delta).clamp(0., 1.)
+        return x_adv.detach(), None, None
+
+
+
+
+class Pgd_Attack_1():
+    
+    def __init__(self, epsilon=4./255., alpha=1e-2, num_iter=2, los='pgd'):
+        self.epsilon = epsilon
+        self.num_iter = num_iter
+        self.loss_fn = losses[los]
+        self.los_name = los
+        self.alpha = alpha
+
+    def adv_attack(self, model, X, y): # Untargetted Attack
+        
+        model.eval()
+        print(self.epsilon)
+        # x_best_adv = x_adv.clone()
         delta = torch.zeros_like(X).cuda()
         delta.requires_grad = True
         # trg = y.squeeze(1)
@@ -220,18 +271,21 @@ class Pgd_Attack():
                 loss = self.loss_fn(logits, y.long(), t, self.num_iter)
             else:
                 loss = self.loss_fn(logits, y.long())
+
+            # print(ind_pred.size(0))
             loss = loss.sum()
             loss.backward()
             grad = delta.grad.detach()
             grad_sign = torch.sign(grad)
             delta.data = (delta + self.alpha * grad_sign)
-            delta.data = (X + delta.data).clamp(0., 1.) - X
+            delta.data = (X + delta.data).clamp(0., 1.) - X            
             delta.data = delta.data.clamp(-self.epsilon, self.epsilon)
             delta.grad.zero_()
             delta.detach()
 
         x_adv = (X + delta).clamp(0., 1.)
         return x_adv.detach(), None, None
+
 
 
 def clean_accuracy(model, data_loder, n_batches=-1, n_cls=21):
