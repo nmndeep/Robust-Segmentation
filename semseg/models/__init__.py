@@ -5,6 +5,7 @@ from .lawin import Lawin
 from .custom_cnn import CustomCNN
 from .uperforseg import UperNetForSemanticSegmentation
 from .pspnet import PSPNet
+from .ddcat_psp import PSPNet_DDCAT
 __all__ = [
     'SegFormer', 
     'Lawin',
@@ -12,5 +13,6 @@ __all__ = [
     'DDRNet', 
     'BiSeNetv2',
     'UperNetForSemanticSegmentation',
-    'PSPNet'
+    'PSPNet',
+    'PSPNet_DDCAT'
 ]

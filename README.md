@@ -1,13 +1,24 @@
 <h3>Some code for semantic segmentation.</h3>
 
-- Tested for `UperNet` with `ConvNext` backbone and `PSPNet-RN50` backbone  for `ADE20K` dataset and `PASCALVOC`.
-- UperNet code taken from Huggingface transformers UperNetforSegmentation.
+Dependencies: PyTorch-2.0.0, torchvision-0.15.0 
+
+- Tested for `UperNet` with `ConvNext` backbone  for `ADE20K` dataset and `PASCALVOC`.
+- UperNet code adapted from Huggingface transformers UperNetforSegmentation.
 - ConvNext code taken from the official repo.
-- Aux_head loss seems to be very important in training these models.
-- IGNORE_Label = -1. Currently not ignoring any pixel either for train or eval.
-- OPTIMIZER still does not have layerwise-decay scheduler like in original ConvNext.
-- update config file in `configs` as required. Currently only useing `ConvNext-T`
-- `run_train.sh` runs on A100 vms, and `runner.sh` on SLURM.
+
+
+Pass the respective config file in `configs` folder as argument.
+TRAINING:
+- `run_train.sh` runs on GPU VMs
+- `runner.sh` on SLURM.
 - `train.py` has the main training script.
-- `infer.py` does evaluation on standard 1.4k images of PASCALVOC `adversarial` flag makes evaluation of a PGD or just the clean model.
-- `seg_map.py` creates images of the image-GT-output-map. 
+
+
+EVALUATION FOR SEA PIPELINE:
+	- Replace 'MODEL_PATH' in EVAL in the respective config file with the trained model.
+Run either (with config file passed as a argument).
+	- `infer.py` does evaluation on standard 1.4k images of PASCALVOC.   OR
+	- 'infer_ade.py' does eval on ADE20K dataset.
+
+- `attack_type`: set to `apgd-larg-eps` for SEA - run with `pair`, 0,1,2,3 then pass the location of the files to 'strr' in worse_case_miou.py.
+- Run 'tools/worse_case_miou.py' for final SEA numbers.

@@ -1,11 +1,11 @@
 DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
 SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
-ADDENDUM        : 'CLEAN_RN50_MOD'
+ADDENDUM        : 'RN50_MOD_stem_AT_trained_5iter_100ep'
 
 MODEL:                                    
   NAME          : PSPNet                                           # name of the model you are using
   BACKBONE      : ResNet-50                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/resnet50_v2.pth'              # backbone model's weight 
+  PRETRAINED    : '/data/naman_deep_singh/model_zoo/resnet_stem_rob.pth'              # backbone model's weight 
 
 DATASET:
   NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
@@ -17,14 +17,14 @@ DATASET:
 TRAIN:  
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
-  BATCH_SIZE    : 36                 # batch size used to train
-  EPOCHS        : 200             # number of epochs to train
+  BATCH_SIZE    : 44                 # batch size used to train
+  EPOCHS        : 100             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
   ATTACK        : pgd
   LOSS_FN       : pgd
   EPS           : 4
-  N_ITERS       : 2
+  N_ITERS       : 5
   FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
@@ -41,16 +41,18 @@ OPTIMIZER:
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
   POWER         : 1.0             # scheduler power
-  WARMUP        : 40              # warmup epochs used in scheduler
+  WARMUP        : 20              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
 EVAL:
   NAME          : pascalvoc                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
   BACKBONE      : ResNet-50
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/PSPNet_ResNet-50_2023-04-18-15_44_08_CLEAN_RN50_MOD/best_model_ckpt.pth'  # trained model file path
+  N_CLS         : 21
+
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/PSPNet_ResNet-50_adv_True_2023-05-15-10_27_28_FREEZE_False_pgd_pgdRN50_MOD_ROB_5iter_100ep/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
-  BATCH_SIZE    : 16                                             # evaluation image size in (h, w)                       
+  BATCH_SIZE    : 32                                             # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  

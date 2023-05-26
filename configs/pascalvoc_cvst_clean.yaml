@@ -1,6 +1,6 @@
 DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
 SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
-ADDENDUM        : 'CLEAN_CVST_MOD'
+ADDENDUM        : 'CLEAN_CVST_MOD_2iter_300ep'
 
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
@@ -18,10 +18,11 @@ TRAIN:
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
   BATCH_SIZE    : 36                 # batch size used to train
-  EPOCHS        : 50             # number of epochs to train
+  EPOCHS        : 300             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
   ATTACK        : pgd
+  LOSS_FN       : pgd
   EPS           : 4
   N_ITERS       : 2
   FREEZE        : false
@@ -40,17 +41,18 @@ OPTIMIZER:
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
   POWER         : 1.0             # scheduler power
-  WARMUP        : 10              # warmup epochs used in scheduler
+  WARMUP        : 60              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
 
 EVAL:
   NAME          : pascalvoc   
-  BACKBONE      : ConvNeXt-T_CVST_ROB      
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-04-28-12_00_56_FREEZE_False_pgd_CLEAN_CVST_MOD/best_model_ckpt.pth'  # trained model file path
+  BACKBONE      : ConvNeXt-T_CVST      
+  N_CLS         : 21
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-22-12_47_20_CLEAN_CVST_MOD_FREEZE_False_apgd/best_model_ckpt.pth'  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
-  BATCH_SIZE    : 16                                                                       # evaluation image size in (h, w)                       
+  BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
@@ -72,3 +74,13 @@ EVAL:
 #pgd 2 iter: /data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-04-19-22_49_29_ROBUST_CVST_MOD_2_iter/best_model_ckpt.pth
 #apgd 2 iter : /data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-04-26-21_02_33__FREEZE_False_apgdROBUST_CVST_MOD_2_ITER/best_model_ckpt.pth
 #rob-init clean : /data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_False_2023-04-30-09_16_45_FREEZE_False_apgd_ROBUST_CVST_MOD_2_ITER/best_model_ckpt
+#rob-init2iter s-model: /data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-S_CVST_ROB_adv_True_2023-05-02-09_43_58_FREEZE_False_pgd_ROBUST_CVST_MOD_2_ITER/best_model_ckpt.pth'
+#rob-init 5iter s-model '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-S_CVST_ROB_adv_True_2023-05-14-11_36_15_FREEZE_False_pgd_pgdROBUST_CVST_MOD_5_ITER/best_model_ckpt.pth'
+
+#clean-init -2at mit normlog: /data/naman_deep_singh/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-05-02-21_38_51_FREEZE_False_pgd_norm-corrlog-avgCLEAN_CVST_MOD/best_model_ckpt.pth'
+#clean-init 2-pgd 200: '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-05-04-12_33_39_FREEZE_False_pgd_pgdCLEAN_CVST_MOD_2iter_200ep/best_model_ckpt.pth'
+#clean-init 5-pgd 300: '/data/naman_deep_singh/model_zoo/seg_models/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-05-06-09_02_55_FREEZE_False_pgd_pgdCLEAN_CVST_MOD_5iter_300ep/best_model_ckpt.pth'
+#clean-init 5-pgd 100: UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-05-07-11_17_28_FREEZE_False_pgd_pgdCLEAN_CVST_MOD_5iter_100ep
+#clean-init 5-pgd 50: UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_True_2023-05-09-16_24_47_FREEZE_False_pgd_pgdCLEAN_CVST_MOD_5iter_50ep
+
+#psp-rn50 3iter-50ep: PSPNet_ResNet-50_adv_True_2023-05-09-22_01_32_FREEZE_False_pgd_pgdCLEAN_RN50_MOD
