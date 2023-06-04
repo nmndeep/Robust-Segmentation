@@ -30,7 +30,6 @@ from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
 
 from tools.val import Pgd_Attack, clean_accuracy
-# torch.backends.cudnn.benchmark=False
 torch.backends.cudnn.deterministic=True
 
 class Trainer:
@@ -120,14 +119,10 @@ class Trainer:
         model = self.model
 
         self.loss_fn = get_loss(self.loss_cfg['NAME'], self.ignore_label, None)
-        # self.loss_fn = torch.nn.NLLLoss(ignore_index=-1)
         self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
-        # self.optimizer = create_optimizers(model, self.lr, self.optim_cfg['WEIGHT_DECAY'], self.gpu)
         self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
-        # self.scheduler2 = get_scheduler(self.sched_cfg['NAME'], self.optimizer[1], self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
 
         self.scaler = GradScaler(enabled=self.train_cfg['AMP'])
-        # self.writer = SummaryWriter(self.save_path + "/results")
 
 
     def dataloaders(self):
@@ -166,11 +161,8 @@ class Trainer:
     def main(self):
 
         model = self.model
-        # for epoch in range(self.epochs):
         time1 = time.time()
         model.train()
-        # if self.train_cfg['DDP']: self.train_sampler.set_epoch(epoch)
-        # pbar = tqdm(enumerate(self.trainloader), total=self.iters_per_epoch, desc=f"Epoch: [{epoch+1}/{self.epochs}] Iter: [{0}/{self.iters_per_epoch}] LR: {lr:.8f} Loss: {train_loss:.8f}")
         train_loss = 0.0 
         best_mIoU = 0.0
         best_macc = 0.0
@@ -193,12 +185,6 @@ class Trainer:
                 logger=None, gpuu=self.gpu
                 )
 
-        # for iterr, (img, lbl) in enumerate(self.train_loader):
-        #         # assert  == 0
-        #         print(lbl.min(), lbl.max()) 
-        # exit()
-        # i,l =next(iter(self.train_loader))
-        # print(i.size(), l.size())
         for iterr, (img, lbl) in enumerate(self.train_loader):
             # torch.cuda.empty_cache()
             # print("we are in the train-loop")
