@@ -29,7 +29,7 @@ def evaluate(model, dataloader, device, cls, n_batches=-1):
     for i, (images, labels) in enumerate(dataloader):
         images = images.to(device)
         labels = labels.to(device)
-        preds = model(input=images)
+        preds = model(images)
         metrics.update(preds.softmax(dim=1), labels)
         if i + 1 == n_batches:
             break
@@ -196,7 +196,7 @@ losses = {'pgd': lambda x, y: F.cross_entropy(x, y),
 }
 
 
-class Pgd_Attack():
+class Pgd_Attack_1():
     
     def __init__(self, epsilon=4./255., alpha=1e-2, num_iter=2, los='pgd'):
         self.epsilon = epsilon
@@ -216,7 +216,10 @@ class Pgd_Attack():
         best_delta = torch.zeros_like(X)
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
-            logits = model(input=(X + delta).clamp(0., 1.))
+            #TODO fix for consistency
+            # logits = model(input=(X + delta).clamp(0., 1.))
+            logits = model((X + delta).clamp(0., 1.))
+
             # print(t)
             if self.los_name == 'segpgd-loss':
                 loss = self.loss_fn(logits, y.long(), t, self.num_iter)
@@ -246,7 +249,7 @@ class Pgd_Attack():
 
 
 
-class Pgd_Attack_1():
+class Pgd_Attack():
     
     def __init__(self, epsilon=4./255., alpha=1e-2, num_iter=2, los='pgd'):
         self.epsilon = epsilon
@@ -258,21 +261,20 @@ class Pgd_Attack_1():
     def adv_attack(self, model, X, y): # Untargetted Attack
         
         model.eval()
-        print(self.epsilon)
         # x_best_adv = x_adv.clone()
         delta = torch.zeros_like(X).cuda()
         delta.requires_grad = True
         # trg = y.squeeze(1)
         for t in range(self.num_iter):
             lam_t = t / 2 * self.num_iter
-            logits = model(input=(X + delta).clamp(0., 1.))
-            # print(t)
+            #TODO fix for consistency
+            # logits = model(input=(X + delta).clamp(0., 1.))
+            logits = model((X + delta).clamp(0., 1.))            # print(t)
             if self.los_name == 'segpgd-loss':
                 loss = self.loss_fn(logits, y.long(), t, self.num_iter)
             else:
                 loss = self.loss_fn(logits, y.long())
 
-            # print(ind_pred.size(0))
             loss = loss.sum()
             loss.backward()
             grad = delta.grad.detach()

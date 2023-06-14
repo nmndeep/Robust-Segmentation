@@ -17,10 +17,11 @@ from torchvision import transforms
 from functools import partial
 from torch import distributed as dist
 from semseg.models import *
+from semseg.models.segmenter import create_segmenter
 from semseg.datasets import * 
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
-from semseg.schedulers import get_scheduler
+from semseg.schedulers import get_scheduler, PolynomialLR
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
 from val import evaluate
@@ -30,7 +31,49 @@ from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
 
 from tools.val import Pgd_Attack, clean_accuracy
+# torch.backends.cudnn.benchmark=False
 torch.backends.cudnn.deterministic=True
+
+
+
+import yaml
+from pathlib import Path
+
+import os
+
+
+def load_config():
+    return yaml.load(
+        open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
+    )
+
+
+from timm import scheduler
+from timm import optim
+
+
+
+def create_scheduler(opt_args, optimizer):
+    if opt_args.sched == "polynomial":
+        lr_scheduler = PolynomialLR(
+            optimizer,
+            opt_args.poly_step_size,
+            opt_args.iter_warmup,
+            opt_args.iter_max,
+            opt_args.poly_power,
+            opt_args.min_lr,
+        )
+    else:
+        lr_scheduler, _ = scheduler.create_scheduler(opt_args, optimizer)
+    return lr_scheduler
+
+
+def create_optimizer(opt_args, model):
+    return optim.create_optimizer(opt_args, model)
+
+
+
+
 
 class Trainer:
 
@@ -50,12 +93,35 @@ class Trainer:
             self.setup_distributed(world_size=self.world_size)
 
 
-        self.ignore_label = -1
+        self.ignore_label = -1 # redundant
 
-        # self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'])
-        self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
-        # self.model = normalize_model(self.model)
-        # self.model.backbone.requires_grad = False
+        if self.model_cfg['NAME']!= 'SegMenter':    
+            self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
+        else:
+            # TODO Make this consistent, remove hardcoding of values for vit-s
+
+            cfg1 = load_config()
+            model_cfg = cfg1["model"][self.model_cfg['BACKBONE']]
+            dataset_cfg = cfg1["dataset"]["ade20k"]
+            decoder_cfg = cfg1["decoder"]["mask_transformer"]
+
+
+            im_size = 512
+            crop_size = dataset_cfg.get("crop_size", im_size)
+            window_size = dataset_cfg.get("window_size", im_size)
+
+            window_stride = dataset_cfg.get("window_stride", im_size)
+
+            model_cfg["image_size"] = (crop_size, crop_size)
+            model_cfg["backbone"] = self.model_cfg['BACKBONE']
+            model_cfg["dropout"] = 0.0
+            model_cfg["drop_path_rate"] = 0.1
+            decoder_cfg["name"] = "mask_transformer"
+            model_cfg["decoder"] = decoder_cfg
+            model_cfg["n_cls"] = self.dataset_cfg['N_CLS']
+            # if self.gpu == 0:
+            self.model = create_segmenter(model_cfg, self.model_cfg['PRETRAINED'])
+        print("WE shoud be seen")
         if bool(self.train_cfg['FREEZE']):
             self.freeze_some_layers()
 
@@ -119,10 +185,34 @@ class Trainer:
         model = self.model
 
         self.loss_fn = get_loss(self.loss_cfg['NAME'], self.ignore_label, None)
-        self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
-        self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
+        #TODO: make consistent
+        # self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
+        # self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
+        #! only for segmenter
+        optimizer_kwargs=dict(
+            opt="sgd",
+            lr=0.001,
+            weight_decay=0.00001,
+            momentum=0.9,
+            clip_grad=None,
+            sched="polynomial",
+            epochs=self.epochs,
+            min_lr=1e-5,
+            poly_power=0.9,
+            poly_step_size=1,
+        )
+         # optimizer
+        optimizer_kwargs["iter_max"] = (20000//self.bs) * optimizer_kwargs["epochs"]
+        optimizer_kwargs["iter_warmup"] = 0.0
+        opt_args = argparse.Namespace()
+        opt_vars = vars(opt_args)
+        for k, v in optimizer_kwargs.items():
+            opt_vars[k] = v
+        self.optimizer = create_optimizer(opt_args, self.model)
+        self.scheduler = create_scheduler(opt_args, self.optimizer)
 
         self.scaler = GradScaler(enabled=self.train_cfg['AMP'])
+        # self.writer = SummaryWriter(self.save_path + "/results")
 
 
     def dataloaders(self):
@@ -139,7 +229,7 @@ class Trainer:
         val_dataset = get_segmentation_dataset(self.dataset_cfg['NAME'], root=self.dataset_cfg['ROOT'], split='val', mode='val', **data_kwargs)
         self.iters_per_epoch = len(train_dataset) // (self.world_size * self.bs)
         self.max_iters = self.epochs * self.iters_per_epoch
-        workers = 4
+        workers = 8
 
         self.train_sampler = make_data_sampler(train_dataset, shuffle=True, distributed=self.train_cfg['DDP'])
         train_batch_sampler = make_batch_data_sampler(self.train_sampler, self.bs, self.max_iters)
@@ -161,8 +251,10 @@ class Trainer:
     def main(self):
 
         model = self.model
+        # for epoch in range(self.epochs):
         time1 = time.time()
         model.train()
+
         train_loss = 0.0 
         best_mIoU = 0.0
         best_macc = 0.0
@@ -184,48 +276,48 @@ class Trainer:
                 track_loss=None,    
                 logger=None, gpuu=self.gpu
                 )
+        criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
+
+
 
         for iterr, (img, lbl) in enumerate(self.train_loader):
             # torch.cuda.empty_cache()
             # print("we are in the train-loop")
+            num_updates = (iterr//self.iters_per_epoch) * (20000//self.bs)
             if iterr <= 5 and self.gpu==0:
                 print(img.min(), img.max())
                 if self.adversarial_train:
                     self.logger.log(f"{self.attack}-{self.train_cfg['N_ITERS']} iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
             self.optimizer.zero_grad(set_to_none=True)
-            # for optim in self.optimizer:
-            #     optim.zero_grad(set_to_none=True)
                 
             img = img.cuda(self.gpu, non_blocking=True)
             lbl = lbl.cuda(self.gpu, non_blocking=True)
 
             with autocast(enabled=self.train_cfg['AMP']):
+                #TODO fix this properly for SEGMENTER
                 if self.adversarial_train:
                     model.eval()
                     img = attack_fn(model, img, lbl)[0]
                     model.train()
-                loss, logits = model(img, lbl)
-                # logits = torch.nn.functional.log_softmax(logits, dim=1)
-                # loss = self.loss_fn(logits, lbl)
+                if self.model_cfg['NAME']!= 'SegMenter':
+                    loss, logits = model(img, lbl)
+                else:
+                    seg_pred = model.forward(img)
+                    loss = criterion(seg_pred, lbl)
 
             self.scaler.scale(loss).backward()
-            
-            # for optim in self.optimizer:
-            #     self.scaler.step(optim)
+
             self.scaler.step(self.optimizer)
-            
+            num_updates +=1
             self.scaler.update()
-            self.scheduler.step()
-            # self.scheduler2.step()
-            # torch.cuda.synchronize()
-            # adjust_learning_rate(optimizers=self.optimizer, cur_iter=iterr, lr=self.lr, max_iter=self.max_iters)
+            # self.scheduler.step()
+            self.scheduler.step_update(num_updates=num_updates)
             lr = self.scheduler.get_lr()
             lr = sum(lr) / len(lr)
             train_loss += loss.item()
 
             eta_seconds = ((time.time() - time1) / (iterr+1)) * (self.max_iters - iterr)
             eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-            # print(iterr+1, self.iters_per_epoch)
 
             if self.gpu == 0 and (iterr + 1) % (self.iters_per_epoch//2) ==0:
                 self.logger.log(
@@ -243,9 +335,6 @@ class Trainer:
                 self.logger.log(f"Epoch: [{iterr//self.iters_per_epoch+1}] \t Val miou: {miou}")
                 model.train()
 
-                # if (iterr+1) % (self.iters_per_epoch) >=  self.epochs - 100:
-                #     torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + f"/model_ckpt_{iterr+1}.pth")
-
                 torch.save(model.module.state_dict() if self.train_cfg['DDP'] else model.state_dict(), self.save_path + f"/model_ckpt_{str(iterr+1)}.pth")
 
                 if miou > best_mIoU:
@@ -254,7 +343,7 @@ class Trainer:
                 if macc > best_macc:
                     best_macc = macc
                 print(f"Current mIoU: {miou} Best mIoU: {best_mIoU}")
-                print(f"Current mAcc: {macc} Best mIoU: {best_macc}")
+                print(f"Current mAcc: {macc} Best mAcc: {best_macc}")
                 print(f"Current aAcc: {eval__stats[2]}")
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
