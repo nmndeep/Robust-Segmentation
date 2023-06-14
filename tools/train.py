@@ -74,7 +74,6 @@ def create_optimizer(opt_args, model):
 
 
 
-
 class Trainer:
 
     def __init__(self, gpu, cfg):
@@ -310,7 +309,7 @@ class Trainer:
             self.scaler.step(self.optimizer)
             num_updates +=1
             self.scaler.update()
-            # self.scheduler.step()
+
             self.scheduler.step_update(num_updates=num_updates)
             lr = self.scheduler.get_lr()
             lr = sum(lr) / len(lr)
@@ -396,4 +395,3 @@ if __name__ == '__main__':
 
     Trainer.launch_from_args(args.world_size, cfg)
 
-    # main(cfg, gpu, save_dir)

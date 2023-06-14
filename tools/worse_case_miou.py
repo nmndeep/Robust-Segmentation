@@ -63,7 +63,7 @@ EPS = 0.0627 #0.0157, 0.0314, 0.0471, 0.0627
 ITERR = "S_mod" #, #"S_mod"
 ATTACK = 'apgd-larg-eps'
 n_it = 300
-# apgd-larg-eps_js-avg_5iter_mod_rob_mod_0.0157_n_it_500_pascalvoc_ConvNeXt-T_CVST_ROB_SD_225_lx500
+
 strr = [
 f"{ATTACK}_mask-ce-avg_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt", 
 f"{ATTACK}_segpgd-loss_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvNeXt-S_CVST_ROB_SD_225.pt",
@@ -74,10 +74,7 @@ f"{ATTACK}_mask-norm-corrlog-avg_{ITERR}_rob_mod_{EPS}_n_it_{n_it}_{DATAS}_ConvN
 losses_lis = ['mask-ce-avg','segpgd-loss', 'js-avg','mask-norm-corrlog-avg']
 
 pair_idx = [['ma-ce+seg+js'], ['ma-ce+js+ma-nm'], ['ma-ce+ma-mn'], ['ma-ce+seg+ma-nm']]
-# exit()
 
-# print(f"WORST_CASE_{ATTACK}_{EPS}_{ITERR}" + strr[0][strr[0].find("300")+3:])
-# exit()
 
 
 def clean_accuracy(
