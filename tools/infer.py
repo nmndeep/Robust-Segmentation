@@ -30,6 +30,7 @@ from semseg.datasets import *
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler
+from semseg.models.segmenter import create_segmenter
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
 from val import evaluate, Pgd_Attack
@@ -48,6 +49,14 @@ np.random.seed(SEED)
 
 g = torch.Generator()
 g.manual_seed(SEED)
+
+
+
+def load_config():
+    return yaml.load(
+        open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
+    )
+
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
@@ -251,7 +260,7 @@ los_pairs = [['mask-ce-avg'], ['segpgd-loss'], ['js-avg'], ['mask-norm-corrlog-a
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_rob.yaml')
+    parser.add_argument('--cfg', type=str, default='configs/ade20k_segmenter_clean.yaml')
     parser.add_argument('--eps', type=float, default=1.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=300)
@@ -267,7 +276,30 @@ if __name__ == '__main__':
 
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
-    model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
+    # model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
+    cfg1 = load_config()
+    model_cfg1 = cfg1["model"][model_cfg['BACKBONE']]
+    dataset_cfg1 = cfg1["dataset"]["ade20k"]
+    decoder_cfg = cfg1["decoder"]["mask_transformer"]
+
+
+    im_size = 512
+    crop_size = dataset_cfg1.get("crop_size", im_size)
+    window_size = dataset_cfg1.get("window_size", im_size)
+
+    window_stride = dataset_cfg1.get("window_stride", im_size)
+
+    model_cfg1["image_size"] = (crop_size, crop_size)
+    model_cfg1["backbone"] = model_cfg['BACKBONE']
+    model_cfg1["dropout"] = 0.0
+    model_cfg1["drop_path_rate"] = 0.1
+    decoder_cfg["name"] = "mask_transformer"
+    model_cfg1["decoder"] = decoder_cfg
+    model_cfg1["n_cls"] = dataset_cfg['N_CLS']
+    # if self.gpu == 0:
+    model = create_segmenter(model_cfg1, model_cfg['PRETRAINED'])
+
+
     # model = eval(model_cfg['NAME'])
     model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
     # checkpoint = torch.load(test_cfg['MODEL_PATH'],  map_location='cpu')
@@ -309,35 +341,36 @@ if __name__ == '__main__':
     clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS']-1, ignore_index=-1)
     print(clean_stats)
     exit()
-    if 'pgd_5iter' in test_cfg['MODEL_PATH']:
-        fold = '5iter_rob_model'
-        appen = '5iter'
-    elif 'ROBUST_CVST_MOD_2_iter' in test_cfg['MODEL_PATH']: 
-        fold = '2iter_rob_model'
-        appen = '2iter'
-    elif 'ConvNeXt-S_CVST_ROB' in test_cfg['MODEL_PATH']:
-        fold = 'S_model'
-        appen = 'S'
-    elif 'PSPNet_ResNet-50' in test_cfg['MODEL_PATH']:
-        fold = '2iter_rob_model'
-        appen = 'PSP_N'
-    else:
-        fold = 'clean_model_out'
-        print(test_cfg['MODEL_PATH'])
-        if '5iter_300ep' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_300'
-        elif '5iter_100' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_100'
-        elif '5iter_50' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_50'
-        elif '2iter_50ep' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_2iter_50'
-        else:
-            appen = 'c_init_2iter_200'
+    # if 'pgd_5iter' in test_cfg['MODEL_PATH']:
+    #     fold = '5iter_rob_model'
+    #     appen = '5iter'
+    # elif 'ROBUST_CVST_MOD_2_iter' in test_cfg['MODEL_PATH']: 
+    #     fold = '2iter_rob_model'
+    #     appen = '2iter'
+    # elif 'ConvNeXt-S_CVST_ROB' in test_cfg['MODEL_PATH']:
+    #     fold = 'S_model'
+    #     appen = 'S'
+    # elif 'PSPNet_ResNet-50' in test_cfg['MODEL_PATH']:
+    #     fold = '2iter_rob_model'
+    #     appen = 'PSP_N'
+    # else:
+    #     fold = 'clean_model_out'
+    #     print(test_cfg['MODEL_PATH'])
+    #     if '5iter_300ep' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_300'
+    #     elif '5iter_100' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_100'
+    #     elif '5iter_50' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_50'
+    #     elif '2iter_50ep' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_2iter_50'
+    #     else:
+    #         appen = 'c_init_2iter_200'
     # appen = 'PSP_N'
     # print(appen)
     # exit()
     fold = '5iter_rob_model'
+    appen = 'SEGMENTER_clean_init'
     for ite, ls in enumerate(los_pairs[args.pair]):
         # args.eps = ls #'segpgd-loss' 
         args.attack = ls
@@ -387,7 +420,7 @@ if __name__ == '__main__':
 
         if args.adversarial:
             adv_stats, l_outs = clean_accuracy(model, adv_loader, -1, n_cls=dataset_cfg['N_CLS'], ignore_index=-1)
-            torch.save(l_outs, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}_MAX.pt")
+            torch.save(l_outs, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}_MAX.pt")
             adv = torch.cat([x for x, y in adv_loader], dim=0).cpu()
             data_dict = {'adv': adv}
             print(data_dict['adv'].shape)
@@ -396,7 +429,7 @@ if __name__ == '__main__':
         with open(cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/logs/"+ f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}_MAX.txt", 'a+') as f:
             if ite == 0:
                 f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
-                f.write(f"Clean results: {clean_stats}\n")
+                # f.write(f"Clean results: {clean_stats}\n")
                 f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
             if args.adversarial:
                 f.write(f"----- Linf radius: {args.eps:.4f} ------")

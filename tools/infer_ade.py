@@ -325,39 +325,39 @@ if __name__ == '__main__':
     # clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS'], ignore_index=-1)
     # print(clean_stats)
     # exit()
-    if '5iter' in test_cfg['MODEL_PATH']:
-        fold = '5iter_ade'
-        if 'clean_init_5iter' in test_cfg['MODEL_PATH']:
-            appen = 'clean_5iter_ADE'
-        else:
-            appen = '5iter_ADE'
-    elif '2_iter' in test_cfg['MODEL_PATH']: 
-        fold = '2iter_ade'
-        appen = '2iter_ADE'
+    # if '5iter' in test_cfg['MODEL_PATH']:
+    #     fold = '5iter_ade'
+    #     if 'clean_init_5iter' in test_cfg['MODEL_PATH']:
+    #         appen = 'clean_5iter_ADE'
+    #     else:
+    #         appen = '5iter_ADE'
+    # elif '2_iter' in test_cfg['MODEL_PATH']: 
+    #     fold = '2iter_ade'
+    #     appen = '2iter_ADE'
         
-    elif 'ConvNeXt-S_CVST_ROB' in test_cfg['MODEL_PATH']:
-        fold = 'S_model'
-        appen = 'S_ADE'
-    elif 'ddcat_pspnet50' in test_cfg['MODEL_PATH']:
-        fold = '2iter_rob_model'
-        appen = 'DDCAT'
-    else:
-        fold = 'clean_model_out'
-        print(test_cfg['MODEL_PATH'])
-        if '5iter_300ep' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_300'
-        elif '5iter_100' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_100'
-        elif '5iter_50' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_5iter_50'
-        elif '2iter_50ep' in test_cfg['MODEL_PATH']:
-            appen = 'c_init_2iter_50'
-        else:
-            appen = 'c_init_2iter_200'
+    # elif 'ConvNeXt-S_CVST_ROB' in test_cfg['MODEL_PATH']:
+    #     fold = 'S_model'
+    #     appen = 'S_ADE'
+    # elif 'ddcat_pspnet50' in test_cfg['MODEL_PATH']:
+    #     fold = '2iter_rob_model'
+    #     appen = 'DDCAT'
+    # else:
+    #     fold = 'clean_model_out'
+    #     print(test_cfg['MODEL_PATH'])
+    #     if '5iter_300ep' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_300'
+    #     elif '5iter_100' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_100'
+    #     elif '5iter_50' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_5iter_50'
+    #     elif '2iter_50ep' in test_cfg['MODEL_PATH']:
+    #         appen = 'c_init_2iter_50'
+    #     else:
+    #         appen = 'c_init_2iter_200'
     fold = '5iter_ade'
-    # appen = '5iter_ade_32ep'
-    print(appen)
-    exit()
+    appen = 'SEGMENTER'
+    # print(appen)
+    # exit()
     for ite, ls in enumerate(los_pairs[args.pair]):
         # args.eps = ls #'segpgd-loss' 
         args.attack = ls
