@@ -1,15 +1,15 @@
 DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
-SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
-ADDENDUM        : 'CLEAN_CVST'
+SAVE_DIR        : 'PATH-TO-SAVE_DIR'         # output folder name used for saving the model, logs and inference results
+ADDENDUM        : 'will-be-appended-at-the-end-of-logfoldername'
 
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
   BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/convnext_tiny_cvst_clean.pt'              # backbone model's weight 
+  PRETRAINED    : 'Location-of-pretrained-backbone-model'              # backbone model's weight 
 
 DATASET:
   NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-  ROOT          : '/data/naman_deep_singh/datasets/'                         # dataset root path
+  ROOT          : 'location-of-dataset-folder'                         # dataset root path
   IGNORE_LABEL  : -1
   N_CLS         : 151
   SEED          : 0
@@ -44,11 +44,11 @@ SCHEDULER:
   WARMUP        : 20              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
-EVAL:
+EVAL: ### for evaluation/testing
   NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
   BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
   N_CLS         : 151
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-05-15-09_35_44_FREEZE_False_pgd_pgdROBUST_CVST_MOD_32ep/best_model_ckpt.pth'  # trained model file path
+  MODEL_PATH    : ''  # trained model file path
   BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]        
   BATCH_SIZE    : 24                                                              # evaluation image size in (h, w)                       
