@@ -2,7 +2,7 @@
 
 *Francesco Croce, Naman D Singh, Matthias Hein*
 
-University of Tübingen, Tübingen AI Center
+University of Tübingen
 
 ---------------------------------
 
