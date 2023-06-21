@@ -53,7 +53,3 @@ EVAL:
   BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]        
   BATCH_SIZE    : 24                                                              # evaluation image size in (h, w)                       
-  MSF: 
-    ENABLE      : false                                                                 # multi-scale and flip evaluation  
-    FLIP        : true                                                                  # use flip in evaluation  
-    SCALES      : [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]                                     # scales used in MSF evaluation                      
