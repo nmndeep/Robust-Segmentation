@@ -9,7 +9,8 @@
 # print info about current job
 
 scontrol show job $SLURM_JOB_ID 
-#conda activate main_py
+
 		
 
-python3 ./tools/infer.py --adversarial --eps $2 #--world_size $2
+python3 ./tools/infer.py --adversarial --cfg $1 --eps $2 
+
