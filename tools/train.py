@@ -25,32 +25,13 @@ from semseg.schedulers import get_scheduler, PolynomialLR
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
 from val import evaluate
-# from mmcv.utils import Config
-# from mmcv.runner import get_dist_info
 from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
 
 from tools.val import Pgd_Attack, clean_accuracy
-# torch.backends.cudnn.benchmark=False
 torch.backends.cudnn.deterministic=True
-
-
-
-import yaml
-from pathlib import Path
-
-import os
-
-
-def load_config():
-    return yaml.load(
-        open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
-    )
-
-
 from timm import scheduler
 from timm import optim
-
 
 
 def create_scheduler(opt_args, optimizer):
@@ -94,35 +75,14 @@ class Trainer:
 
         self.ignore_label = -1 # redundant
 
-        if self.model_cfg['NAME']!= 'SegMenter':    
+        if self.model_cfg['NAME']!= 'SegMenter':   
+
             self.model = eval(self.model_cfg['NAME'])(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'], self.model_cfg['PRETRAINED'])
         else:
             # TODO Make this consistent, remove hardcoding of values for vit-s
 
-            cfg1 = load_config()
-            model_cfg = cfg1["model"][self.model_cfg['BACKBONE']]
-            dataset_cfg = cfg1["dataset"]["ade20k"]
-            decoder_cfg = cfg1["decoder"]["mask_transformer"]
-
-
-            im_size = 512
-            crop_size = dataset_cfg.get("crop_size", im_size)
-            window_size = dataset_cfg.get("window_size", im_size)
-
-            window_stride = dataset_cfg.get("window_stride", im_size)
-
-            model_cfg["image_size"] = (crop_size, crop_size)
-            model_cfg["backbone"] = self.model_cfg['BACKBONE']
-            model_cfg["dropout"] = 0.0
-            model_cfg["drop_path_rate"] = 0.1
-            decoder_cfg["name"] = "mask_transformer"
-            model_cfg["decoder"] = decoder_cfg
-            model_cfg["n_cls"] = self.dataset_cfg['N_CLS']
-            # if self.gpu == 0:
+            model_cfg, dataset_cfg = load_config(self.model_cfg['BACKBONE'], self.dataset_cfg['N_CLS'])
             self.model = create_segmenter(model_cfg, self.model_cfg['PRETRAINED'])
-        print("WE shoud be seen")
-        if bool(self.train_cfg['FREEZE']):
-            self.freeze_some_layers()
 
         self.attack = self.train_cfg['ATTACK']
         self.model = self.model.to(self.gpu)
@@ -130,11 +90,9 @@ class Trainer:
 
         self.save_dir = str(cfg['SAVE_DIR'])
 
-        
         if self.gpu == 0:
             self.save_path = f'{self.save_dir}/' + str(self.dataset_cfg['NAME'])  + "/" + str(self.model_cfg['NAME']) + '_' + str(self.model_cfg['BACKBONE']) +f'_adv_{self.adversarial_train}_{str(datetime.datetime.now())[:-7].replace(" ", "-").replace(":", "_")}' + '_FREEZE_'+ str(self.train_cfg['FREEZE']) + '_' + str(self.train_cfg['ATTACK'])+ '_' + str(self.train_cfg['LOSS_FN']) + str(cfg['ADDENDUM'])
             makedir(self.save_path)
-            # makedir(self.save_path +"/results")
 
             self.logger = Logger(self.save_path + "/train_log")
 
@@ -147,11 +105,11 @@ class Trainer:
 
         self.init_optim_log()
 
-        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu], find_unused_parameters=True)
+        self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[self.gpu])
 
 
     def freeze_some_layers(self, early=True):
-
+        '''Can be used for fine-tuning specific layers'''
         if early:
             for name, child in self.model.backbone.named_children():
                 for namm, pamm in child.named_parameters():
@@ -184,34 +142,18 @@ class Trainer:
         model = self.model
 
         self.loss_fn = get_loss(self.loss_cfg['NAME'], self.ignore_label, None)
-        #TODO: make consistent
-        # self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
-        # self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
-        #! only for segmenter
-        optimizer_kwargs=dict(
-            opt="sgd",
-            lr=0.001,
-            weight_decay=0.00001,
-            momentum=0.9,
-            clip_grad=None,
-            sched="polynomial",
-            epochs=self.epochs,
-            min_lr=1e-5,
-            poly_power=0.9,
-            poly_step_size=1,
-        )
-         # optimizer
-        optimizer_kwargs["iter_max"] = (20000//self.bs) * optimizer_kwargs["epochs"]
-        optimizer_kwargs["iter_warmup"] = 0.0
-        opt_args = argparse.Namespace()
-        opt_vars = vars(opt_args)
-        for k, v in optimizer_kwargs.items():
-            opt_vars[k] = v
-        self.optimizer = create_optimizer(opt_args, self.model)
-        self.scheduler = create_scheduler(opt_args, self.optimizer)
-
+       
+        
+        if self.model_cfg['NAME'] == 'SegMenter':
+            assert self.dataset_cfg['NAME'] == 'ADE20K' # only works for ADE20K
+            opt_args = optim_args_segmenter(self.bs, self.epochs)
+            self.optimizer = create_optimizer(opt_args, self.model)
+            self.scheduler = create_scheduler(opt_args, self.optimizer)
+        else:
+            self.optimizer = get_optimizer(model, self.optim_cfg['NAME'], self.lr, self.optim_cfg['WEIGHT_DECAY'], self.dataset_cfg['NAME'].lower(), str(self.model_cfg['BACKBONE']))
+            self.scheduler = get_scheduler(self.sched_cfg['NAME'], self.optimizer, self.epochs * self.iters_per_epoch, self.sched_cfg['POWER'], self.iters_per_epoch * self.sched_cfg['WARMUP'], self.sched_cfg['WARMUP_RATIO'])
+        
         self.scaler = GradScaler(enabled=self.train_cfg['AMP'])
-        # self.writer = SummaryWriter(self.save_path + "/results")
 
 
     def dataloaders(self):
@@ -277,16 +219,15 @@ class Trainer:
                 )
         criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
-
-
         for iterr, (img, lbl) in enumerate(self.train_loader):
             # torch.cuda.empty_cache()
+            print(len(self.train_loader))
             # print("we are in the train-loop")
-            num_updates = (iterr//self.iters_per_epoch) * (20000//self.bs)
+            # num_updates = (iterr//self.iters_per_epoch) * (25574//self.bs)
             if iterr <= 5 and self.gpu==0:
                 print(img.min(), img.max())
                 if self.adversarial_train:
-                    self.logger.log(f"{self.attack}-{self.train_cfg['N_ITERS']} iter {self.train_cfg['EPS']}/255 training - Frozen backbobe: {str(self.train_cfg['FREEZE'])}")
+                    self.logger.log(f"{self.attack}-for {self.train_cfg['N_ITERS']} iterations  for eps: {self.train_cfg['EPS']}/255, alpha : 1e-2")
             self.optimizer.zero_grad(set_to_none=True)
                 
             img = img.cuda(self.gpu, non_blocking=True)
@@ -305,12 +246,15 @@ class Trainer:
                     loss = criterion(seg_pred, lbl)
 
             self.scaler.scale(loss).backward()
-
             self.scaler.step(self.optimizer)
-            num_updates +=1
+            # num_updates +=1
             self.scaler.update()
 
-            self.scheduler.step_update(num_updates=num_updates)
+            if self.model_cfg['NAME']!= 'SegMenter':
+                self.scheduler.step()
+            else:
+                self.scheduler.step_update()
+            
             lr = self.scheduler.get_lr()
             lr = sum(lr) / len(lr)
             train_loss += loss.item()
@@ -347,21 +291,17 @@ class Trainer:
 
             if self.gpu==0 and (iterr + 1) % self.iters_per_epoch == 0:
                 train_loss /= iterr+1
-                # self.writer.add_scalar('train/loss', train_loss, (iterr + 1)//self.iters_per_epoch)
                 train_loss = 0.0  # per epoch loss is Zero
 
-        # self.writer.close()
         end = time.gmtime(time.time() - time1)
 
         table = [
             ['Best mIoU', f"{best_mIoU:.2f}"],
             ['Best mAcc', f"{best_macc:.2f}"],
-
             ['Total Training Time', time.strftime("%H:%M:%S", end)]
         ]
         if self.gpu == 0:
             print(tabulate(table, numalign='right'))
-
             self.logger.log(str(tabulate(table, numalign='right')))
 
 
@@ -386,7 +326,7 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/custom.yaml', help='Configuration file to use')
+    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_convnext_cvst.yaml', help='Configuration file to use')
     parser.add_argument('--world_size', type=int, default=6, help='Configuration file to use')
     args = parser.parse_args()
 

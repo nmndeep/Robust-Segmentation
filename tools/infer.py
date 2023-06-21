@@ -39,8 +39,6 @@ import semseg.datasets.transform_util as transform
 from semseg.metrics import Metrics
 import torchvision
 from fvcore.nn import FlopCountAnalysis, flop_count_table, flop_count_str
-# from mmcv.utils import Config
-# from mmcv.runner import get_dist_info
 from semseg.datasets.dataset_wrappers import *
 console = Console()
 SEED = 225
@@ -52,11 +50,28 @@ g.manual_seed(SEED)
 
 
 
-def load_config():
-    return yaml.load(
+def load_config_segmenter(backbone='vit_small_patch16_224'):
+    cfg1= yaml.load(
         open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
     )
+    model_cfg1 = cfg1["model"][backbone]
+    dataset_cfg1 = cfg1["dataset"]["ade20k"]
+    decoder_cfg = cfg1["decoder"]["mask_transformer"]
 
+
+    im_size = 512
+    crop_size = dataset_cfg1.get("crop_size", im_size)
+    window_size = dataset_cfg1.get("window_size", im_size)
+
+    window_stride = dataset_cfg1.get("window_stride", im_size)
+
+    model_cfg1["image_size"] = (crop_size, crop_size)
+    model_cfg1["backbone"] = backbone
+    model_cfg1["dropout"] = 0.0
+    model_cfg1["drop_path_rate"] = 0.1
+    decoder_cfg["name"] = "mask_transformer"
+    model_cfg1["decoder"] = decoder_cfg
+    model_cfg1["n_cls"] = dataset_cfg['N_CLS']
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
@@ -71,11 +86,112 @@ def sizeof_fmt(num, suffix="Flops"):
         num /= 1000.0
     return f"{num:.1f}Yi{suffix}"
 
-IN_MEAN = [0.485, 0.456, 0.406]
-IN_STD = [0.229, 0.224, 0.225]
 
-def clean_accuracy(
-    model, data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False):
+def worse_case_eval(data_loder, l_output, n_cls=21, ignore_index=-1):
+    """Compute worse case across 4-losses in SEA."""
+    # model.eval()
+    acc = 0
+    n_ex = 0
+    int_cls = torch.zeros(n_cls)
+    union_cls = torch.zeros(n_cls)
+
+    # l_output = []
+
+    # for i in range(len(strr)):
+    #     l_output.append(torch.load(BASE_DIR + f"{fold}/preds/" + strr[i]))
+    aa= [l_output] #, l_output2]
+    final_acc_1 = None
+    final_acc_2 = None
+
+    class_wise_logits = torch.stack(l_output)
+    # print(class_wise_logits.size())
+    aaacc = []
+    ious = []
+    unions = []
+    for i, vals in enumerate(data_loder):
+       
+        if False:
+            print(i)
+        else:
+            _, target = vals[0], vals[1]
+            BS = target.shape[0]
+            acc_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+            n_pxl_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+            # pointwise tensors for worst-case miou
+            int_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+            union_cls = torch.zeros(class_wise_logits.shape[0], BS, n_cls)
+            pred = class_wise_logits[:, i*BS:i*BS+BS]
+
+            acc_curr = pred == target
+            intersection_all = pred == target
+
+            for cl in range(n_cls):
+                ind = target == cl
+                ind = ind.expand(class_wise_logits.shape[0], -1, -1, -1)
+                acc_curr_ = acc_curr  * ind
+                acc_cls[:, :, cl] += acc_curr_.view(acc_curr.shape[0], acc_curr.shape[1], -1).float().sum((2))
+                n_pxl_cls[:, :, cl] += ind.view(ind.shape[0], ind.shape[1], -1).float().sum(2)
+
+                intersection_all_ = intersection_all * ind
+                int_cls[:, :,  cl] = intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(2)
+                union_cls[:, :,  cl] = (ind.view(ind.shape[0], ind.shape[1], -1).float().sum(-1) + (pred == cl).view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(-1)
+                              - intersection_all_.view(intersection_all.shape[0], intersection_all.shape[1], -1).float().sum(2))
+
+            tenss = acc_cls.sum(2) / n_pxl_cls.sum(2)
+            aaacc.append(tenss)
+            ious.append(int_cls)
+            unions.append(union_cls)
+        if i + 1 == n_batches:
+            print('enough batches seen')
+            break
+   
+    final_acc_1 = (torch.cat(aaacc, dim=-1))
+       
+
+    ious = torch.cat(ious, dim=1)
+    unions = torch.cat(unions, dim=1)
+    wrs_i = []
+    wrs_u = []
+
+    print("loss-wise mious:", (ious.sum(1)/unions.sum(1)).mean(-1))
+    indx = final_acc_1.min(0)[1]
+    for i in range(indx.size(0)):
+        wrs_i.append(ious[indx[i], i, :].unsqueeze(0))
+        wrs_u.append(unions[indx[i], i, :].unsqueeze(0))
+
+    worse_ious = torch.cat(wrs_i, dim=0)
+    worse_unios = torch.cat(wrs_u, dim=0)
+  
+
+    worse_miou = (worse_ious.sum(0) / worse_unios.sum(0)).mean() 
+
+    worse_1 = final_acc_1.min(0)[0].mean()
+    at_w_sum1 = final_acc_1.mean(-1)
+ 
+    print("SEA evaluated Acc", worse_1)
+    print("SEA evaluated mIoU", worse_miou.item())
+
+    pairs = []
+    pair_lis =  [[0,1,2], [0,2,3], [0, 3], [0,1,3]] # used for table-6 in paper
+
+    for p in pair_lis:
+        pairs.append(final_acc_1[p].min(0)[0].mean().item())
+
+    save_dict = {'worst_Acc_across_4_losses': worse_1,
+                'worst_Acc_indiv': at_w_sum1, 
+                'pair_wise_key': pair_idx,
+                'pair_wise_Acc': pairs, 
+                'final_matrix_Acc': final_acc_1,
+                'worse_miou': worse_miou,
+                'worse_inter_per_img': worse_ious,
+                'worse_union_per_img': worse_unios}
+    print(save_dict)
+
+    return save_dict
+
+
+def eval_performance(
+    model, data_loder, n_batches=-1, n_cls=21, return_output=False, ignore_index=-1, return_preds=False, verbose=False):
     """Evaluate accuracy."""
 
     model.eval()
@@ -98,8 +214,8 @@ def clean_accuracy(
         else:
             input, target = vals[0], vals[1]
             #print(input[0, 0, 0, :10])
-            print(input[0, 0, 0, :10], input.min(), input.max(),
-                target.min(), target.max())
+            # print(input[0, 0, 0, :10], input.min(), input.max(),
+            #     target.min(), target.max())
             input = input.cuda()
 
             with torch.no_grad():
@@ -124,29 +240,26 @@ def clean_accuracy(
             m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
 
             # Compute overall correctly classified pixels.
-            #acc_curr = acc_curr.float().view(input.shape[0], -1).mean(-1)
-            #acc += acc_curr.sum()
+
             a_acc = acc_cls.sum() / n_pxl_cls.sum()
             n_ex += input.shape[0]
             #print('step 2 done')
 
             # Compute intersection and union.
             intersection_all = pred == target
-            #pred[target == 0] = 0
             for cl in range(n_cls):
                 ind = target == cl
                 int_cls[cl] += intersection_all[ind].float().sum()
                 union_cls[cl] += (ind.float().sum() + (pred == cl).float().sum()
                                   - intersection_all[ind].float().sum())
             ind = union_cls > 0
-            #ind[0] = False
             m_iou = (int_cls[ind] / union_cls[ind]).mean()
 
-            print(
-                f'batch={i} running mAcc={m_acc:.2%} running aAcc={a_acc.mean():.2%}',
-                f' running mIoU={m_iou:.2%}')
+            if verbose:
+                print(
+                    f'batch={i} running mAcc={m_acc:.2%} running aAcc={a_acc.mean():.2%}',
+                    f' running mIoU={m_iou:.2%}')
 
-        #print(metrics.compute_iou()[1], metrics.compute_pixel_acc()[1])
 
         if i + 1 == n_batches:
             print('enough batches seen')
@@ -172,7 +285,7 @@ def evaluate(val_loader, model, attack_fn, n_batches=-1, args=None):
     adv_loader = []
 
     for i, (input, target) in enumerate(val_loader):
-        print(input[0, 0, 0, :10])
+        # print(input[0, 0, 0, :10])
         input = input.cuda()
         target = target.cuda()
 
@@ -256,12 +369,12 @@ def mask_logits(model: nn.Module, ignore_index: int) -> nn.Module:
     ])
     return nn.Sequential(layers)
 
-los_pairs = [['mask-ce-avg'], ['segpgd-loss'], ['js-avg'], ['mask-norm-corrlog-avg']]
+los_pairs = ['mask-ce-avg', 'segpgd-loss', 'js-avg', 'mask-norm-corrlog-avg']
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/ade20k_segmenter_clean.yaml')
-    parser.add_argument('--eps', type=float, default=1.)
+    parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean_5iter.yaml')
+    parser.add_argument('--eps', type=float, default=4.)
     parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
     parser.add_argument('--n_iter', type=int, default=300)
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=True)
@@ -277,164 +390,86 @@ if __name__ == '__main__':
     dataset_cfg, model_cfg, test_cfg = cfg['DATASET'], cfg['MODEL'], cfg['EVAL']
 
     # model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
-    cfg1 = load_config()
-    model_cfg1 = cfg1["model"][model_cfg['BACKBONE']]
-    dataset_cfg1 = cfg1["dataset"]["ade20k"]
-    decoder_cfg = cfg1["decoder"]["mask_transformer"]
 
+    if model_cfg['NAME'] != 'UperNetForSemanticSegmentation':
+        model_cfg1, dataset_cfg1 = load_config_segmenter(model_cfg['BACKBONE'])
+        model = create_segmenter(model_cfg1, model_cfg['PRETRAINED'])
+    else:
+        model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
 
-    im_size = 512
-    crop_size = dataset_cfg1.get("crop_size", im_size)
-    window_size = dataset_cfg1.get("window_size", im_size)
+    ckpt = torch.load(test_cfg['MODEL_PATH'], map_location='cpu')
 
-    window_stride = dataset_cfg1.get("window_stride", im_size)
-
-    model_cfg1["image_size"] = (crop_size, crop_size)
-    model_cfg1["backbone"] = model_cfg['BACKBONE']
-    model_cfg1["dropout"] = 0.0
-    model_cfg1["drop_path_rate"] = 0.1
-    decoder_cfg["name"] = "mask_transformer"
-    model_cfg1["decoder"] = decoder_cfg
-    model_cfg1["n_cls"] = dataset_cfg['N_CLS']
-    # if self.gpu == 0:
-    model = create_segmenter(model_cfg1, model_cfg['PRETRAINED'])
-
-
-    # model = eval(model_cfg['NAME'])
-    model.load_state_dict(torch.load(test_cfg['MODEL_PATH'], map_location='cpu'))
-    # checkpoint = torch.load(test_cfg['MODEL_PATH'],  map_location='cpu')
-    # model.load_state_dict(checkpoint['state_dict'], strict=False)
-    # model = PSPNet_DDCAT(layers=50, classes=21, zoom_factor=8, pretrained=False)
-    # if True:
-    #     print('Add normalization layer.')   
-    #     model = normalize_model(model, IN_MEAN, IN_STD)
-    # checkpoint = torch.load(test_cfg['MODEL_PATH'],  map_location='cpu')
-    # model.load_state_dict(checkpoint['state_dict'], strict=False)
-    # model_norm = False
+    model.load_state_dict(ckpt)
 
     model = model.to('cuda')
 
-    # model = mask_logits(model, 0)
     model.eval()
-    # inpp = torch.rand(1, 3, 512, 512)
-    # flops = FlopCountAnalysis(model, inpp)
-    # val = flops.total()
-    # print(val)
-    # print(sizeof_fmt(int(val)))
-    # print(flop_count_table(flops, max_depth=2))
-    # print(flops.by_operator())
-
 
     val_data_loader = get_data(dataset_cfg, test_cfg)
 
-    # clean_accuracy(model, dataloader)
-    # exit()
     console.print(f"Model > [yellow1]{cfg['MODEL']['NAME']} {test_cfg['BACKBONE']}[/yellow1]")
     console.print(f"Dataset > [yellow1]{test_cfg['NAME']}[/yellow1]")
 
     save_dir = Path(cfg['SAVE_DIR']) / 'test_results'
     save_dir.mkdir(exist_ok=True)
 
-    preds = []
-    lblss = []
 
-    clean_stats, _ = clean_accuracy(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS']-1, ignore_index=-1)
-    print(clean_stats)
-    exit()
-    # if 'pgd_5iter' in test_cfg['MODEL_PATH']:
-    #     fold = '5iter_rob_model'
-    #     appen = '5iter'
-    # elif 'ROBUST_CVST_MOD_2_iter' in test_cfg['MODEL_PATH']: 
-    #     fold = '2iter_rob_model'
-    #     appen = '2iter'
-    # elif 'ConvNeXt-S_CVST_ROB' in test_cfg['MODEL_PATH']:
-    #     fold = 'S_model'
-    #     appen = 'S'
-    # elif 'PSPNet_ResNet-50' in test_cfg['MODEL_PATH']:
-    #     fold = '2iter_rob_model'
-    #     appen = 'PSP_N'
-    # else:
-    #     fold = 'clean_model_out'
-    #     print(test_cfg['MODEL_PATH'])
-    #     if '5iter_300ep' in test_cfg['MODEL_PATH']:
-    #         appen = 'c_init_5iter_300'
-    #     elif '5iter_100' in test_cfg['MODEL_PATH']:
-    #         appen = 'c_init_5iter_100'
-    #     elif '5iter_50' in test_cfg['MODEL_PATH']:
-    #         appen = 'c_init_5iter_50'
-    #     elif '2iter_50ep' in test_cfg['MODEL_PATH']:
-    #         appen = 'c_init_2iter_50'
-    #     else:
-    #         appen = 'c_init_2iter_200'
-    # appen = 'PSP_N'
-    # print(appen)
-    # exit()
-    fold = '5iter_rob_model'
-    appen = 'SEGMENTER_clean_init'
-    for ite, ls in enumerate(los_pairs[args.pair]):
-        # args.eps = ls #'segpgd-loss' 
+
+    loss_wise_logits = []
+    
+    save_argmax_of_log = False #set to true for saving argmax of image-wise logits after adversarial attack
+    verbose=False #print all intermediate step computations?
+
+    #check the clean performance of the model
+    clean_stats, _ = eval_performance(model, val_data_loader, n_batches=-1, n_cls=test_cfg['N_CLS']-1, ignore_index=-1, verbose=verbose)
+    args.norm = 'Linf'
+
+    if args.norm == 'Linf' and args.eps >= 1.:
+        args.eps /= 255.
+
+    for ite, ls in enumerate(los_pairs):
+        console.print(f"Loss > [yellow1]{ls}[/yellow1]" + f" Epsilon > [yellow1]{args.eps:.4f}[/yellow1]")
         args.attack = ls
         if args.adversarial:
-            strr = f"adversarial_{test_cfg['NAME']}_{args.attack_type}_{fold}_SD_{SEED}"
-        else:
-            strr = f"clean_{test_cfg['NAME']}"
-        # args.eps = ls
-        if args.adversarial:
-            n_batches = -1
-            # norm = 'Linf'
-            args.norm = 'Linf'
+            n_batches = -1 # set to -1 for full validation set
 
-            if args.norm == 'Linf' and args.eps >= 1.:
-                args.eps /= 255.
 
-            attack_pgd = Pgd_Attack(epsilon=args.eps, alpha=1e-2, num_iter=100, los=args.attack) if args.attack_type == 'pgd' else None
-            if args.attack_type == 'apgd':
-                attack_fn = partial(
-                    attacker.apgd_restarts,
-                    norm=args.norm,
-                    eps=args.eps,
-                    n_iter=args.n_iter,
-                    n_restarts=1,
-                    use_rs=True,
-                    loss=args.attack if args.attack else 'ce-avg',
-                    verbose=True,
-                    track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',    
-                    log_path=None,
-                    early_stop=True
-                    )
-            else:
-                args.n_iter = 300
-                attack_fn =  partial(
-                    attacker.apgd_largereps,
-                    norm=args.norm,
-                    eps=args.eps,
-                    n_iter=args.n_iter,
-                    n_restarts=1, #args.n_restarts,
-                    use_rs=True,
-                    loss=args.attack if args.attack else 'ce-avg',
-                    verbose=True,
-                    track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',
-                    log_path=None,
-                    early_stop=True)
+            args.n_iter = 300
+            attack_fn =  partial(
+                attacker.apgd_largereps,
+                norm=args.norm,
+                eps=args.eps,
+                n_iter=args.n_iter,
+                n_restarts=1, #args.n_restarts,
+                use_rs=True,
+                loss=args.attack if args.attack else 'ce-avg',
+                verbose=verbose,
+                track_loss='norm-corrlog-avg' if args.attack == 'mask-norm-corrlog-avg' else 'ce-avg',
+                log_path=None,
+                early_stop=True)
             adv_loader = evaluate(val_data_loader, model, attack_fn, n_batches, args)
 
         if args.adversarial:
-            adv_stats, l_outs = clean_accuracy(model, adv_loader, -1, n_cls=dataset_cfg['N_CLS'], ignore_index=-1)
-            torch.save(l_outs, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}_MAX.pt")
-            adv = torch.cat([x for x, y in adv_loader], dim=0).cpu()
-            data_dict = {'adv': adv}
-            print(data_dict['adv'].shape)
-            # torch.save(data_dict, cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/images/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}.pt")
+            adv_stats, l_outs = eval_performance(model, adv_loader, n_batches, n_cls=dataset_cfg['N_CLS'], ignore_index=-1, verbose=verbose)
+            if save_argmax_of_log:
+                torch.save(l_outs, cfg['SAVE_DIR'] + f"/argmax_logits_model_{model_cfg['NAME']}_{model_cfg['BACKBONE']}_loss_{ls}_eps_{args.eps}.pt")
+            # adv = torch.cat([x for x, y in adv_loader], dim=0).cpu()
+            # data_dict = {'adv': adv}
+            # print(data_dict['adv'].shape)
+            loss_wise_logits.append(l_outs)
+        #WRite the stats for the individual loss to a text file
+        if False:
+            with open(cfg['SAVE_DIR'] + f"/loss_wise_stats_model_{model_cfg['NAME']}_{model_cfg['BACKBONE']}_loss_{ls}_eps_{args.eps}.txt", 'a+') as f:
+                if ite == 0:
+                    f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
+                    f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
+                if args.adversarial:
+                    f.write(f"----- Linf radius: {args.eps:.4f} ------")
+                    f.write(f"Attack: {args.attack_type} {args.attack} \t \t Iterations: {args.n_iter} \t alpha: 0.01 \n")   
+                    f.write(f"Adversarial results: {adv_stats}\n") 
+                f.write("\n")
 
-        with open(cfg['SAVE_DIR'] + f"/test_results/output_logits_new/{fold}/logs/"+ f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}_MAX.txt", 'a+') as f:
-            if ite == 0:
-                f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
-                # f.write(f"Clean results: {clean_stats}\n")
-                f.write(f"{str(test_cfg['MODEL_PATH'])}\n")
-            if args.adversarial:
-                f.write(f"----- Linf radius: {args.eps:.4f} ------")
-                f.write(f"Attack: {args.attack_type} {args.attack} \t \t Iterations: {args.n_iter} \t alpha: 0.01 \n")   
-                f.write(f"Adversarial results: {adv_stats}\n") 
-                # f.write(f"Adversarial mIoU: {adv_miou:.2%} \t mAcc: {adv_macc:.2%}\t aAcc: {adv_aacc:.2%}\n")
-            f.write("\n")
-        console.rule(f"[cyan]Segmentation results are saved in {cfg['SAVE_DIR']}" + f"/test_results/output_logits_new/{fold}/preds/" + f"{args.attack_type}_{args.attack}_{appen}_mod_rob_mod_{args.eps:.4f}_n_it_{args.n_iter}_{test_cfg['NAME']}_{test_cfg['BACKBONE']}_SD_{SEED}")
+    sea_stats = worse_case_eval(val_data_loader, loss_wise_logits)
+    exit()
+    torch.save(sea_stats, cfg['SAVE_DIR'] + f"/SEA_stats_{model_cfg['NAME']}_{model_cfg['BACKBONE']}_loss_{ls}_eps_{args.eps}.pt")
+    console.rule(f"[cyan]Segmentation Ensemble Attack complete")

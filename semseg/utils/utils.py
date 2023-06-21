@@ -15,7 +15,9 @@ from semseg import models
 
 from collections import OrderedDict
 from typing import Tuple
-
+import yaml
+from timm import scheduler
+from timm import optim
 
 class ImageNormalizer(nn.Module):
     def __init__(self, mean: Tuple[float, float, float],
@@ -37,6 +39,54 @@ def normalize_model(model: nn.Module, mean: Tuple[float, float, float],
     ])
     return nn.Sequential(layers)
 
+
+def load_config_segmenter(backbone, n_cls):
+    cfg1 = yaml.load(
+        open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
+    )
+    model_cfg = cfg1["model"][backbone]
+    dataset_cfg = cfg1["dataset"]["ade20k"]
+    decoder_cfg = cfg1["decoder"]["mask_transformer"]
+
+
+    im_size = 512
+    crop_size = dataset_cfg.get("crop_size", im_size)
+    window_size = dataset_cfg.get("window_size", im_size)
+
+    window_stride = dataset_cfg.get("window_stride", im_size)
+
+    model_cfg["image_size"] = (crop_size, crop_size)
+    model_cfg["backbone"] = backbone
+    model_cfg["dropout"] = 0.0
+    model_cfg["drop_path_rate"] = 0.1
+    decoder_cfg["name"] = "mask_transformer"
+    model_cfg["decoder"] = decoder_cfg
+    model_cfg["n_cls"] = n_cls
+
+
+def optim_args_segmenter(bs, epochs):
+    #only works for ADE20K
+    optimizer_kwargs=dict(
+        opt="sgd",
+        lr=0.001,
+        weight_decay=0.00001,
+        momentum=0.9,
+        clip_grad=None,
+        sched="polynomial",
+        epochs=epochs,
+        min_lr=1e-5,
+        poly_power=0.9,
+        poly_step_size=1,
+    )
+     # optimizer
+    optimizer_kwargs["iter_max"] = (25574//bs) * optimizer_kwargs["epochs"]
+    optimizer_kwargs["iter_warmup"] = 0.0
+    opt_args = argparse.Namespace()
+    opt_vars = vars(opt_args)
+    for k, v in optimizer_kwargs.items():
+        opt_vars[k] = v
+
+    return opt_args
 
 
 
