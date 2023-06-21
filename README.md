@@ -13,7 +13,7 @@ Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2`
 
 Run runner_infer.sh with the models config (.yaml) file from [configs](/configs) folder.
 
-This computes the final adversarial robustness for the particular dataset and model passed as arguments within the .yaml file.
+This computes the final adversarial robustness for the particular dataset and model passed as arguments within the `.yaml` file.
 _________________________________
 <h4>Training</h4>
 
@@ -21,15 +21,15 @@ SLURM type setup in `runner.sh` , run with `location_of_config` file and `num_of
 
 - For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `ADE20K`
 
- 	-  Clean-training: config-file: *ade20k_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model 
-	-  Adversarial-training: config-file: *ade20k_convnext_rob_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model
+ 	-  Clean-training: config-file: *ade20k_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model. 
+	-  Adversarial-training: config-file: *ade20k_convnext_rob_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model.
  
 - For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `PASCALVOC`
   
-	-  Clean-training: config-file: *pascalvoc_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model 
-	-  Adversarial-training: config-file: *pascalvoc_convnext_rob_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model
+	-  Clean-training: config-file: *pascalvoc_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model. 
+	-  Adversarial-training: config-file: *pascalvoc_convnext_rob_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model.
    
-- For `SegMenter` with `Vit-S` backbone for `ADE20K` dataset.
+- For `SegMenter` with `Vit-S` backbone for `ADE20K` dataset
   
 	-  Adversarial-training: config-file: *ade20k_segmenter_clean.yaml*, set `ADVERSARIAL` to FALSE for clean training.
 
@@ -46,7 +46,9 @@ We make our robust models publically available.
 | UperNet-ConvNext-S_CVST | ADE20K     | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
 *SegMenter model available soon.
 
-Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at) github repository.
+Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at)* github repository.
+
+*Note:For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
 _________________________________
 
 <h5>Acknowledgements</h5>
