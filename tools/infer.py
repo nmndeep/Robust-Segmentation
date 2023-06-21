@@ -375,12 +375,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cfg', type=str, default='configs/pascalvoc_cvst_clean_5iter.yaml')
     parser.add_argument('--eps', type=float, default=4.)
-    parser.add_argument('--store-data', action='store_true', help='PGD data?', default=False)
-    parser.add_argument('--n_iter', type=int, default=300)
+    parser.add_argument('--n_iter', type=int, default=300) #donot change set to the standard SEA implementaiton
     parser.add_argument('--adversarial', action='store_true', help='adversarial eval?', default=True)
     parser.add_argument('--attack', type=str, default='segpgd-loss', help='pgd, cospgd-loss, ce-avg or mask-ce-avg, segpgd-loss, mask-norm-corrlog-avg, js-avg?')
-    parser.add_argument('--attack_type', type=str, default='apgd-larg-eps', help='apgd or apgd-larg-eps?')
-    parser.add_argument('--pair', type=int, default=0, help='0, 1 or 2')
+    parser.add_argument('--attack_type', type=str, default='apgd-larg-eps', help='apgd or apgd-larg-eps?') #donot change set to the standard SEA implementaiton
 
     args = parser.parse_args()
 
@@ -470,6 +468,5 @@ if __name__ == '__main__':
                 f.write("\n")
 
     sea_stats = worse_case_eval(val_data_loader, loss_wise_logits)
-    exit()
     torch.save(sea_stats, cfg['SAVE_DIR'] + f"/SEA_stats_{model_cfg['NAME']}_{model_cfg['BACKBONE']}_loss_{ls}_eps_{args.eps}.pt")
     console.rule(f"[cyan]Segmentation Ensemble Attack complete")
