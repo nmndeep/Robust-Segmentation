@@ -1,6 +1,6 @@
 DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
 SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
-ADDENDUM        : 'CLEAN_CVST_MOD'
+ADDENDUM        : 'CLEAN_CVST'
 
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
@@ -11,15 +11,21 @@ DATASET:
   NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
   ROOT          : '/data/naman_deep_singh/datasets/'                         # dataset root path
   IGNORE_LABEL  : -1
-  N_CLS         : 150
+  N_CLS         : 151
   SEED          : 0
-
+  
 TRAIN:
   BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]      # training image size in (h, w)
-  BATCH_SIZE    : 36                 # batch size used to train
+  BATCH_SIZE    : 16                 # batch size used to train
   EPOCHS        : 128             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
+  ADVERSARIAL   : false
+  ATTACK        : apgd
+  LOSS_FN       : pgd
+  EPS           : 4
+  N_ITERS       : 5
+  FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
 
@@ -28,29 +34,25 @@ LOSS:
   CLS_WEIGHTS   : false            # use class weights in loss calculation
 
 OPTIMIZER:
-  NAME          : AdamW           # optimizer name
+  NAME          : AdamW           # optimizer name, default=sgd
   LR            : 0.0001           # initial learning rate used in optimizer
   WEIGHT_DECAY  : 0.05            # decay rate used in optimizer 
 
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
   POWER         : 1.0             # scheduler power
-  WARMUP        : 10              # warmup epochs used in scheduler
+  WARMUP        : 20              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
-
 EVAL:
-  MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
-  BASE_SIZE     : 520 
-  IMAGE_SIZE    : [512, 512]                                                            # evaluation image size in (h, w)                       
+  NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
+  N_CLS         : 151
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/ADE20K/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_ROB_adv_True_2023-05-15-09_35_44_FREEZE_False_pgd_pgdROBUST_CVST_MOD_32ep/best_model_ckpt.pth'  # trained model file path
+  BASE_SIZE     : 520
+  IMAGE_SIZE    : [512, 512]        
+  BATCH_SIZE    : 24                                                              # evaluation image size in (h, w)                       
   MSF: 
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
-    SCALES      : [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]                                     # scales used in MSF evaluation                
-
-
-# TEST:
-#   MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
-#   FILE          : 'assests/ade'                                                         # filename or foldername 
-#   IMAGE_SIZE    : [512, 512]                                                            # inference image size in (h, w)
-#   OVERLAY       : true                                                                  # save the overlay result (image_alpha+label_alpha)
+    SCALES      : [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]                                     # scales used in MSF evaluation                      

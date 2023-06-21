@@ -17,8 +17,8 @@ DATASET:
 TRAIN:
   BASE_SIZE     : 520
   IMAGE_SIZE    : [512, 512]      # training image size in (h, w)
-  BATCH_SIZE    : 32                 # batch size used to train
-  EPOCHS        : 32             # number of epochs to train
+  BATCH_SIZE    : 16                 # batch size used to train
+  EPOCHS        : 128             # number of epochs to train
   EVAL_INTERVAL : 32              # evaluation interval during training
   ADVERSARIAL   : true
   ATTACK        : pgd
@@ -57,10 +57,3 @@ EVAL:
     ENABLE      : false                                                                 # multi-scale and flip evaluation  
     FLIP        : true                                                                  # use flip in evaluation  
     SCALES      : [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]                                     # scales used in MSF evaluation                      
-
-
-# TEST:
-#   MODEL_PATH    : 'checkpoints/pretrained/segformer/segformer.b2.ade.pth'  # trained model file path
-#   FILE          : 'assests/ade'                                                         # filename or foldername 
-#   IMAGE_SIZE    : [512, 512]                                                            # inference image size in (h, w)
-#   OVERLAY       : true                                                                  # save the overlay result (image_alpha+label_alpha)
