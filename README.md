@@ -1,4 +1,10 @@
-<h3>Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models </h3>
+<h2>Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models </h2>
+
+*Francesco Croce, Naman D Singh, Matthias Hein*
+
+University of Tübingen, Tübingen AI Center
+
+---------------------------------
 
 Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2` 
 
@@ -8,7 +14,7 @@ Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2`
 Run runner_infer.sh with the models config (.yaml) file from [configs](/configs) folder.
 
 This computes the final adversarial robustness for the particular dataset and model passed as arguments within the .yaml file.
-
+_________________________________
 <h4>Training</h4>
 
 SLURM type setup in `runner.sh` , run with `location_of_config` file and `num_of_gpu` as arguments.
@@ -27,6 +33,8 @@ SLURM type setup in `runner.sh` , run with `location_of_config` file and `num_of
   
 	-  Adversarial-training: config-file: *ade20k_segmenter_clean.yaml*, set `ADVERSARIAL` to FALSE for clean training.
 
+_________________________________
+
 <h4> Robust-Segmentation models</h4>
 
 We make our robust models publically available. 
@@ -39,6 +47,7 @@ We make our robust models publically available.
 *SegMenter model available soon.
 
 Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at) github repository.
+_________________________________
 
 <h5>Acknowledgements</h5>
 
