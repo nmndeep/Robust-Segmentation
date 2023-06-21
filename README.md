@@ -5,7 +5,7 @@ Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2`
 
 <h4>Segmentation Ensemble Attack (SEA) evaluation</h4>
 
-Run runner_infer.sh with the models config (.yaml) file from [configs](\configs) folder.
+Run runner_infer.sh with the models config (.yaml) file from [configs](/configs) folder.
 
 This computes the final adversarial robustness for the particular dataset and model passed as arguments within the .yaml file.
 
