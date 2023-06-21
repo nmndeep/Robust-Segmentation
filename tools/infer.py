@@ -204,9 +204,6 @@ def eval_performance(
     # if logger is None:
     #     logger = Logger(None)
     l_output = []
-    #print('Using {n_cls} classes and ignore')
-
-    metrics = Metrics(n_cls, -1, 'cpu')
 
     for i, vals in enumerate(data_loder):
         if False:
@@ -221,21 +218,19 @@ def eval_performance(
             with torch.no_grad():
                 output = model(input)
             # l_output.append(output.cpu())
-            #print('fp done')
-            #metrics.update(output.cpu(), target)
+
 
             pred = output.max(1)[1].cpu()
             l_output.append(pred)
             pred[target == ignore_index] = ignore_index
             acc_curr = pred == target
-            #print('step 1 done')
 
             # Compute correctly classified pixels for each class.
             for cl in range(n_cls):
                 ind = target == cl
                 acc_cls[cl] += acc_curr[ind].float().sum()
                 n_pxl_cls[cl] += ind.float().sum()
-            #print(acc_cls, n_pxl_cls)
+
             ind = n_pxl_cls > 0
             m_acc = (acc_cls[ind] / n_pxl_cls[ind]).mean()
 
@@ -265,9 +260,7 @@ def eval_performance(
             print('enough batches seen')
             break
 
-    # logger.log(f'mAcc={m_acc:.2%} aAcc={a_acc:.2%} mIoU={m_iou:.2%} ({n_ex} images)')
-    #print(acc_cls / n_pxl_cls)
-    #print(acc_cls.sum() / n_pxl_cls.sum())
+
     l_output = torch.cat(l_output)
     stats = {
         'mAcc': m_acc.item(),
