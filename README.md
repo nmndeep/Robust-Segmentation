@@ -9,9 +9,15 @@ This computes the final adversarial robustness for the particular dataset and mo
 
 Training
 SLURM type setup in `runner.sh` with `location_of_config` file and `num_of_gpu` as arguments
-- For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `ADE20K` 
-- For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `PASCALVOC` - pass.
+- For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `ADE20K`
+	-  Clean-training: config-file: ade20k_convnext_cvst.yaml replace `BACKBONE` with ''CONVNEXT-S_CVST'' for Small model 
+	-  Adversarial-training: config-file: ade20k_convnext_rob_cvst.yaml replace `BACKBONE` with ''CONVNEXT-S_CVST'' for Small model 
+- For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `PASCALVOC`
+	-  Clean-training: config-file: pascalvoc_convnext_cvst.yaml replace `BACKBONE` with ''CONVNEXT-S_CVST'' for Small model 
+	-  Adversarial-training: config-file: pascalvoc_convnext_rob_cvst.yaml replace `BACKBONE` with ''CONVNEXT-S_CVST'' for Small model 
 - `SegMenter` with `Vit-S` backbone for `ADE20K` dataset.
+	-  Adversarial-training: config-file: ade20k_segmenter.yaml
+
 - UperNet code adapted from Huggingface transformers UperNetforSegmentation.
 - ConvNext code taken from the official repo.
 
