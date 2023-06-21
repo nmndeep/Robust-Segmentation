@@ -48,11 +48,11 @@ We make our robust models publically available.
 
 Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at)* github repository.
 
-*Note:For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
+*Note: For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
 _________________________________
 
 <h5>Acknowledgements</h5>
 
-The code in this repo is partially based on the following publically available codebases
+The code in this repo is partially based on the following publically available codebases.
 
  [1](https://github.com/hszhao/semseg), [2](https://github.com/Tramac/awesome-semantic-segmentation-pytorch), [3](https://github.com/rstrudel/segmenter/),  [4](https://github.com/facebookresearch/ConvNeXt/tree/main/semantic_segmentation), and [5](https://huggingface.co/docs/transformers/main/en/model_doc/upernet#transformers.UperNetForSemanticSegmentation)
