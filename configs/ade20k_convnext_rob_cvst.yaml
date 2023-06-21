@@ -24,7 +24,7 @@ TRAIN:
   ATTACK        : pgd
   LOSS_FN       : pgd
   EPS           : 4
-  N_ITERS       : 5
+  N_ITERS       : 20
   FREEZE        : false
   AMP           : false           # use AMP in training
   DDP           : true           # use DDP training
