@@ -35,13 +35,13 @@ LOSS:
 
 OPTIMIZER:
   NAME          : sgd           # optimizer name, default=sgd
-  LR            : 0.001          # initial learning rate used in optimizer
-  WEIGHT_DECAY  : 0.00001            # decay rate used in optimizer 
+  LR            : 0.002          # initial learning rate used in optimizer
+  WEIGHT_DECAY  : 0.0001            # decay rate used in optimizer 
 
 SCHEDULER:
   NAME          : polylr    # scheduler name
-  POWER         : 1.0             # scheduler power
-  WARMUP        : 1              # warmup epochs used in scheduler
+  POWER         : 0.9             # scheduler power
+  WARMUP        : 10              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
 
