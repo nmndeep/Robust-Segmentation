@@ -1,15 +1,15 @@
 DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
-SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
-ADDENDUM        : 'CLEAN_CVST_MOD_2iter_300ep'
+SAVE_DIR        : 'PATH-TO-SAVE_DIR'         # output folder name used for saving the model, logs and inference results
+ADDENDUM        : 'will-be-appended-at-the-end-of-logfoldername'
 
 MODEL:                                    
   NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
   BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/convnext_tiny_cvst_clean.pt'              # backbone model's weight 
+  PRETRAINED    : 'Location-of-pretrained-backbone-model'              # backbone model's weight 
 
 DATASET:
   NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
-  ROOT          : '/data/naman_deep_singh/datasets/pascal_voc'                         # dataset root path
+  ROOT          : 'location-of-dataset-folder'                         # dataset root path
   IGNORE_LABEL  : -1
   N_CLS         : 21
   SEED          : 0
@@ -49,7 +49,7 @@ EVAL:
   NAME          : pascalvoc   
   BACKBONE      : ConvNeXt-T_CVST      
   N_CLS         : 21
-  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-22-12_47_20_CLEAN_CVST_MOD_FREEZE_False_apgd/best_model_ckpt.pth'  # trained model file path
+  MODEL_PATH    : ''  # trained model file path
   BASE_SIZE     : 512
   IMAGE_SIZE    : [473, 473]                 
   BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       
