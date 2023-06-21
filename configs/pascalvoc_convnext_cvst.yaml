@@ -41,7 +41,7 @@ OPTIMIZER:
 SCHEDULER:
   NAME          : warmuppolylr    # scheduler name
   POWER         : 1.0             # scheduler power
-  WARMUP        : 60              # warmup epochs used in scheduler
+  WARMUP        : 10              # warmup epochs used in scheduler
   WARMUP_RATIO  : 0.00001             # warmup ratio
   
 
