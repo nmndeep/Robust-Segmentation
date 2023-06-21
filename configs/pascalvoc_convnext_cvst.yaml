@@ -1,0 +1,55 @@
+DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
+SAVE_DIR        : '/data/naman_deep_singh/model_zoo/seg_models'         # output folder name used for saving the model, logs and inference results
+ADDENDUM        : 'CLEAN_CVST_MOD_2iter_300ep'
+
+MODEL:                                    
+  NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
+  BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
+  PRETRAINED    : '/data/naman_deep_singh/model_zoo/clean/convnext_tiny_cvst_clean.pt'              # backbone model's weight 
+
+DATASET:
+  NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  ROOT          : '/data/naman_deep_singh/datasets/pascal_voc'                         # dataset root path
+  IGNORE_LABEL  : -1
+  N_CLS         : 21
+  SEED          : 0
+
+TRAIN:  
+  BASE_SIZE     : 512
+  IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
+  BATCH_SIZE    : 32                 # batch size used to train
+  EPOCHS        : 50             # number of epochs to train
+  EVAL_INTERVAL : 32              # evaluation interval during training
+  ADVERSARIAL   : false
+  ATTACK        : pgd
+  LOSS_FN       : pgd
+  EPS           : 4
+  N_ITERS       : 2
+  FREEZE        : false
+  AMP           : false           # use AMP in training
+  DDP           : true           # use DDP training
+
+LOSS:
+  NAME          : CrossEntropy          # loss function name (ohemce, ce, dice)
+  CLS_WEIGHTS   : false            # use class weights in loss calculation
+
+OPTIMIZER:
+  NAME          : AdamW           # optimizer name
+  LR            : 0.001           # initial learning rate used in optimizer
+  WEIGHT_DECAY  : 0.01            # decay rate used in optimizer 
+
+SCHEDULER:
+  NAME          : warmuppolylr    # scheduler name
+  POWER         : 1.0             # scheduler power
+  WARMUP        : 60              # warmup epochs used in scheduler
+  WARMUP_RATIO  : 0.00001             # warmup ratio
+  
+
+EVAL:
+  NAME          : pascalvoc   
+  BACKBONE      : ConvNeXt-T_CVST      
+  N_CLS         : 21
+  MODEL_PATH    : '/data/naman_deep_singh/model_zoo/seg_models/standard_logs/pascalaug/UperNetForSemanticSegmentation_ConvNeXt-T_CVST_adv_False_2023-04-22-12_47_20_CLEAN_CVST_MOD_FREEZE_False_apgd/best_model_ckpt.pth'  # trained model file path
+  BASE_SIZE     : 512
+  IMAGE_SIZE    : [473, 473]                 
+  BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       
