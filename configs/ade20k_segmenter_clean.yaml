@@ -5,7 +5,7 @@ ADDENDUM        : 'will-be-appended-at-the-end-of-logfoldername'
 MODEL:                                    
   NAME          : SegMenter                                           # name of the model you are using
   BACKBONE      : vit_small_patch16_224                                                  # model variant
-  PRETRAINED    : '/data/naman_deep_singh/model_zoo/linf_rob/vit_s_robust.pt'              # backbone model's weight 
+  PRETRAINED    : 'Location-of-pretrained-backbone-model'              # backbone model's weight 
 
 DATASET:
   NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
