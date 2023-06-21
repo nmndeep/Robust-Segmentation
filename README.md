@@ -11,7 +11,8 @@ This computes the final adversarial robustness for the particular dataset and mo
 
 <h4>Training</h4>
 
-SLURM type setup in `runner.sh` with `location_of_config` file and `num_of_gpu` as arguments
+SLURM type setup in `runner.sh` , run with `location_of_config` file and `num_of_gpu` as arguments.
+
 - For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `ADE20K`
 
  	-  Clean-training: config-file: *ade20k_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model 
@@ -22,7 +23,7 @@ SLURM type setup in `runner.sh` with `location_of_config` file and `num_of_gpu` 
 	-  Clean-training: config-file: *pascalvoc_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model 
 	-  Adversarial-training: config-file: *pascalvoc_convnext_rob_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model
    
-- `SegMenter` with `Vit-S` backbone for `ADE20K` dataset.
+- For `SegMenter` with `Vit-S` backbone for `ADE20K` dataset.
   
 	-  Adversarial-training: config-file: *ade20k_segmenter_clean.yaml*, set `ADVERSARIAL` to FALSE for clean training.
 
