@@ -1,0 +1,55 @@
+DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
+SAVE_DIR        : 'PATH-TO-SAVE_DIR'         # output folder name used for saving the model, logs and inference results
+ADDENDUM        : 'will-be-appended-at-the-end-of-logfoldername'
+
+MODEL:                                    
+  NAME          : UperNetForSemanticSegmentation                                           # name of the model you are using
+  BACKBONE      : ConvNeXt-T_CVST                                                  # model variant
+  PRETRAINED    : 'Location-of-pretrained-backbone-model'              # backbone model's weight 
+
+DATASET:
+  NAME          : pascalaug                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  ROOT          : 'location-of-dataset-folder'                         # dataset root path
+  IGNORE_LABEL  : -1
+  N_CLS         : 21
+  SEED          : 0
+
+TRAIN:  
+  BASE_SIZE     : 512
+  IMAGE_SIZE    : [473, 473]      # training image size in (h, w)  
+  BATCH_SIZE    : 32                 # batch size used to train
+  EPOCHS        : 50             # number of epochs to train
+  EVAL_INTERVAL : 32              # evaluation interval during training
+  ADVERSARIAL   : true
+  ATTACK        : pgd
+  LOSS_FN       : pgd
+  EPS           : 4
+  N_ITERS       : 5
+  FREEZE        : false
+  AMP           : false           # use AMP in training
+  DDP           : true           # use DDP training
+
+LOSS:
+  NAME          : CrossEntropy          # loss function name (ohemce, ce, dice)
+  CLS_WEIGHTS   : false            # use class weights in loss calculation
+
+OPTIMIZER:
+  NAME          : AdamW           # optimizer name
+  LR            : 0.001           # initial learning rate used in optimizer
+  WEIGHT_DECAY  : 0.01            # decay rate used in optimizer 
+
+SCHEDULER:
+  NAME          : warmuppolylr    # scheduler name
+  POWER         : 1.0             # scheduler power
+  WARMUP        : 10              # warmup epochs used in scheduler
+  WARMUP_RATIO  : 0.00001             # warmup ratio
+  
+
+EVAL:
+  NAME          : pascalvoc   
+  BACKBONE      : ConvNeXt-T_CVST      
+  N_CLS         : 21
+  MODEL_PATH    : ''  # trained model file path
+  BASE_SIZE     : 512
+  IMAGE_SIZE    : [473, 473]                 
+  BATCH_SIZE    : 32                                                                       # evaluation image size in (h, w)                       
