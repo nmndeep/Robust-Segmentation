@@ -1,10 +1,5 @@
 from .ade import ADE20KSegmentation
-from .camvid import CamVid
-from .cityscapes import CityScapes
 from .cocostuff import COCOStuff
-from .cihp import CIHP, CCIHP
-from .suim import SUIM
-from .celebamaskhq import CelebAMaskHQ
 from .distributed_sampler import DistributedSampler, IterationBasedBatchSampler
 from .pascal_aug import VOCAugSegmentation
 from .pascal_voc import VOCSegmentation
@@ -15,14 +10,8 @@ from torchvision import transforms
 from torch import distributed as dist
 
 __all__ = [
-    'CamVid',
-    'CityScapes',
     'ADE20KSegmentation',
-    'CIHP',
-    'CCIHP',
     'COCOStuff',
-    'SUIM',
-    'CelebAMaskHQ',
     'IterationBasedBatchSampler',
     'DistributedSampler',
     'get_segmentation_dataset',
