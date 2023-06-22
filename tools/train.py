@@ -220,9 +220,7 @@ class Trainer:
         criterion = torch.nn.CrossEntropyLoss(ignore_index=-1)
 
         for iterr, (img, lbl) in enumerate(self.train_loader):
-            # torch.cuda.empty_cache()
-            print(len(self.train_loader))
-            # print("we are in the train-loop")
+            
             # num_updates = (iterr//self.iters_per_epoch) * (25574//self.bs)
             if iterr <= 5 and self.gpu==0:
                 print(img.min(), img.max())
