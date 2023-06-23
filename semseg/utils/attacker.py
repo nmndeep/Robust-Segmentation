@@ -7,26 +7,6 @@ from functools import partial
 from autoattack.other_utils import L1_norm, L2_norm, L0_norm, Logger
 
 
-criterion_dict = {
-    'ce': lambda x, y: F.cross_entropy(
-        x, y, reduction='none', ignore_index=-1),
-    'dlr': dlr_loss,
-    'dlr-targeted': dlr_loss_targeted,
-    'ce-avg': lambda x, y: F.cross_entropy(
-        x, y, reduction='none', ignore_index=-1),
-    'cospgd-loss': partial(cospgd_loss, reduction='none'),
-    'mask-ce-avg': masked_cross_entropy,
-    'margin-avg': lambda x, y: margin_loss(x, y).view(x.shape[0], -1).mean(-1),
-    'mask-margin-avg': masked_margin_loss,
-    'js-avg': partial(js_loss, reduction='none'),
-    'segpgd-loss': partial(segpgd_loss, reduction='none'),
-    'mask-norm-corrlog-avg': partial(
-        single_logits_loss, normalized=True, reduction='none', masked=True),
-    'mask-norm-corrlog-avg-targeted': partial(
-        targeted_single_logits_loss, normalized=True, reduction='none',
-        masked=True),
-    }
-
 def compute_iou_acc(
     pred, target, n_cls, verbose=False, ignore_index=-1, device=None):
     
@@ -354,6 +334,29 @@ def check_oscillation(x, j, k, y5, k3=0.75):
           t += (x[j - counter5] > x[j - counter5 - 1]).float()
 
         return (t <= k * k3 * torch.ones_like(t)).float()
+
+
+
+criterion_dict = {
+    'ce': lambda x, y: F.cross_entropy(
+        x, y, reduction='none', ignore_index=-1),
+    'dlr': dlr_loss,
+    'dlr-targeted': dlr_loss_targeted,
+    'ce-avg': lambda x, y: F.cross_entropy(
+        x, y, reduction='none', ignore_index=-1),
+    'cospgd-loss': partial(cospgd_loss, reduction='none'),
+    'mask-ce-avg': masked_cross_entropy,
+    'margin-avg': lambda x, y: margin_loss(x, y).view(x.shape[0], -1).mean(-1),
+    'mask-margin-avg': masked_margin_loss,
+    'js-avg': partial(js_loss, reduction='none'),
+    'segpgd-loss': partial(segpgd_loss, reduction='none'),
+    'mask-norm-corrlog-avg': partial(
+        single_logits_loss, normalized=True, reduction='none', masked=True),
+    'mask-norm-corrlog-avg-targeted': partial(
+        targeted_single_logits_loss, normalized=True, reduction='none',
+        masked=True),
+    }
+
 
 
 def apgd_train(model, x, y, norm, eps, n_iter=10, use_rs=False, loss='ce',
