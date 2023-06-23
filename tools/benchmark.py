@@ -33,8 +33,8 @@ def main(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model-name', type=str, default='SegFormer')
-    parser.add_argument('--backbone-name', type=str, default='MiT-B0')
+    parser.add_argument('--model-name', type=str, default='UperNetforSegmentation')
+    parser.add_argument('--backbone-name', type=str, default='ConvNext-T_CvSt')
     parser.add_argument('--image-size', type=list, default=[512, 512])
     parser.add_argument('--num-classes', type=int, default=11)
     parser.add_argument('--device', type=str, default='cuda')
