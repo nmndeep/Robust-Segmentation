@@ -25,6 +25,9 @@ _________________________________
 
 SLURM type setup in `runner.sh` , run with `location_of_config` file and `num_of_gpu` as arguments.
 
+For non-SLURM directly run [train.py](/tools/train.py) with `location_of_config` file and `num_of_gpu` as arguments.
+
+
 - For `UperNet` with `ConvNext` (both Tiny and Small versions) backbone  for `ADE20K`
 
  	-  Clean-training: config-file: *ade20k_convnext_cvst.yaml* set `BACKBONE` with `CONVNEXT-S_CVST` for Small model. 
