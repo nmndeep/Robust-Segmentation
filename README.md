@@ -12,7 +12,7 @@ University of Tübingen
 ---------------------------------
 <h3>Experimental setup and code</h3>
 
-Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2` 
+Main dependencies: `PyTorch-2.0.0, torchvision-0.15.0, timm-0.6.2, AutoAttack` 
 
 
 <h4>Segmentation Ensemble Attack (SEA) evaluation</h4>
