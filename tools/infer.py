@@ -27,8 +27,6 @@ from functools import partial
 from semseg.models import *
 from semseg.datasets import * 
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
-from semseg.losses import get_loss
-from semseg.schedulers import get_scheduler
 from semseg.models.segmenter import create_segmenter
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
 from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
