@@ -24,7 +24,6 @@ import gc
 from autoattack.other_utils import check_imgs
 import torch.nn as nn
 from functools import partial
-from semseg.utils.visualize import generate_palette
 from semseg.models import *
 from semseg.datasets import * 
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
@@ -47,7 +46,6 @@ np.random.seed(SEED)
 
 g = torch.Generator()
 g.manual_seed(SEED)
-
 
 
 def load_config_segmenter(backbone='vit_small_patch16_224'):
@@ -89,7 +87,7 @@ def sizeof_fmt(num, suffix="Flops"):
 
 def worse_case_eval(data_loder, l_output, n_cls=21, ignore_index=-1):
     """Compute worse case across 4-losses in SEA."""
-    # model.eval()
+
     acc = 0
     n_ex = 0
     int_cls = torch.zeros(n_cls)
@@ -97,8 +95,6 @@ def worse_case_eval(data_loder, l_output, n_cls=21, ignore_index=-1):
 
     # l_output = []
 
-    # for i in range(len(strr)):
-    #     l_output.append(torch.load(BASE_DIR + f"{fold}/preds/" + strr[i]))
     aa= [l_output] #, l_output2]
     final_acc_1 = None
     final_acc_2 = None
@@ -331,14 +327,6 @@ def get_data(dataset_cfg, test_cfg):
     return val_loader
 
 
-
-# alpha, num_iters
-attack_setting = {'pgd': (0.01, 40), 'segpgd': (0.01, 40),
-                    'cospgd': (0.15, 40),
-                    'maskpgd': (0.15, 40)}
-
-
-
 class MaskClass(nn.Module):
 
     def __init__(self, ignore_index: int) -> None:
@@ -404,8 +392,6 @@ if __name__ == '__main__':
     save_dir = Path(cfg['SAVE_DIR']) / 'test_results'
     save_dir.mkdir(exist_ok=True)
 
-
-
     loss_wise_logits = []
     
     save_argmax_of_log = False #set to true for saving argmax of image-wise logits after adversarial attack
@@ -448,8 +434,9 @@ if __name__ == '__main__':
             # data_dict = {'adv': adv}
             # print(data_dict['adv'].shape)
             loss_wise_logits.append(l_outs)
-        #WRite the stats for the individual loss to a text file
-        if False:
+
+        #Write the stats for the individual loss to a text file
+        if verbose:
             with open(cfg['SAVE_DIR'] + f"/loss_wise_stats_model_{model_cfg['NAME']}_{model_cfg['BACKBONE']}_loss_{ls}_eps_{args.eps}.txt", 'a+') as f:
                 if ite == 0:
                     f.write(f"{cfg['MODEL']['NAME']} - {test_cfg['BACKBONE']}\n")
