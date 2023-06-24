@@ -5,6 +5,4 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # #--config-file $1 \
 sleep 2s
 
-# conda activate ffcv
-
-python3 ./tools/train.py --cfg ./configs/ade20k_cvst_vena.yaml --world_size 8
+python3 ./tools/train.py --cfg ./configs/ade20k_convnext_cvst.yaml --world_size 8
