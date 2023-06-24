@@ -63,6 +63,7 @@ def load_config_segmenter(backbone, n_cls):
     model_cfg["decoder"] = decoder_cfg
     model_cfg["n_cls"] = n_cls
 
+    return model_cfg, dataset_cfg
 
 def optim_args_segmenter(bs, epochs):
     #only works for ADE20K
