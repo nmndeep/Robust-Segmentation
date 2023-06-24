@@ -60,6 +60,17 @@ Robust pre-trained backbone models were taken from [Revisiting-AT](https://githu
 *Note: For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
 _________________________________
 
+<h4>Required citations</h4>
+If you use our code/models consider citing us with the follwong BibTex entry:
+
+<code>@misc{croce2023robust,
+      title={Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models}, 
+      author={Francesco Croce and Naman D Singh and Matthias Hein},
+      year={2023},
+      journal={arXiv:2306.12941}}</code>
+
+Also consider citing [SegPGD](https://arxiv.org/abs/2207.12391) if you use SEA attack, as their loss funciton makes up a part of SEA evaluation.
+
 <h5>Acknowledgements</h5>
 
 The code in this repo is partially based on the following publically available codebases.
