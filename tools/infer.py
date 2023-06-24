@@ -346,7 +346,7 @@ if __name__ == '__main__':
     # model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
 
     if model_cfg['NAME'] != 'UperNetForSemanticSegmentation':
-        model_cfg1, dataset_cfg1 = load_config_segmenter(backbone=model_cfg['BACKBONE'])
+        model_cfg1, dataset_cfg1 = load_config_segmenter(backbone=model_cfg['BACKBONE'], n_cls=test_cfg['N_CLS'])
         model = create_segmenter(model_cfg1, model_cfg['PRETRAINED'])
     else:
         model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
