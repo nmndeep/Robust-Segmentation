@@ -9,6 +9,5 @@
 # print info about current job
 
 scontrol show job $SLURM_JOB_ID 
-#conda activate main_py
 
 python3 ./tools/train.py --cfg $1  --world_size $2
