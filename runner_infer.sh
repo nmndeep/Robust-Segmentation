@@ -10,7 +10,5 @@
 
 scontrol show job $SLURM_JOB_ID 
 
-		
-
 python3 ./tools/infer.py --adversarial --cfg $1 --eps $2 
 
