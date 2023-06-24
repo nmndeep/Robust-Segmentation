@@ -29,7 +29,7 @@ from semseg.datasets import *
 from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.models.segmenter import create_segmenter
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
-from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, makedir, normalize_model
+from semseg.utils.utils import fix_seeds, Logger, makedir, normalize_model, load_config_segmenter
 from val import evaluate, Pgd_Attack
 import semseg.utils.attacker as attacker
 import semseg.datasets.transform_util as transform
@@ -45,29 +45,6 @@ np.random.seed(SEED)
 g = torch.Generator()
 g.manual_seed(SEED)
 
-
-def load_config_segmenter(backbone='vit_small_patch16_224'):
-    cfg1= yaml.load(
-        open("/data/naman_deep_singh/sem_seg/configs/segmenter.yml", "r"), Loader=yaml.FullLoader
-    )
-    model_cfg1 = cfg1["model"][backbone]
-    dataset_cfg1 = cfg1["dataset"]["ade20k"]
-    decoder_cfg = cfg1["decoder"]["mask_transformer"]
-
-
-    im_size = 512
-    crop_size = dataset_cfg1.get("crop_size", im_size)
-    window_size = dataset_cfg1.get("window_size", im_size)
-
-    window_stride = dataset_cfg1.get("window_stride", im_size)
-
-    model_cfg1["image_size"] = (crop_size, crop_size)
-    model_cfg1["backbone"] = backbone
-    model_cfg1["dropout"] = 0.0
-    model_cfg1["drop_path_rate"] = 0.1
-    decoder_cfg["name"] = "mask_transformer"
-    model_cfg1["decoder"] = decoder_cfg
-    model_cfg1["n_cls"] = dataset_cfg['N_CLS']
 
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
@@ -369,7 +346,7 @@ if __name__ == '__main__':
     # model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
 
     if model_cfg['NAME'] != 'UperNetForSemanticSegmentation':
-        model_cfg1, dataset_cfg1 = load_config_segmenter(model_cfg['BACKBONE'])
+        model_cfg1, dataset_cfg1 = load_config_segmenter(backbone=model_cfg['BACKBONE'])
         model = create_segmenter(model_cfg1, model_cfg['PRETRAINED'])
     else:
         model = eval(model_cfg['NAME'])(test_cfg['BACKBONE'], test_cfg['N_CLS'],None)
