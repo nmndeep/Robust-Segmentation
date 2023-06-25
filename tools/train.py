@@ -23,7 +23,7 @@ from semseg.augmentations import get_train_augmentation, get_val_augmentation
 from semseg.losses import get_loss
 from semseg.schedulers import get_scheduler, PolynomialLR
 from semseg.optimizers import get_optimizer, create_optimizers, adjust_learning_rate
-from semseg.utils.utils import fix_seeds, setup_cudnn, cleanup_ddp, setup_ddp, Logger, optim_args_segmenter, normalize_model, load_config_segmenter
+from semseg.utils.utils import makedir, setup_cudnn, cleanup_ddp, setup_ddp, Logger, optim_args_segmenter, normalize_model, load_config_segmenter
 from val import evaluate
 from semseg.datasets.dataset_wrappers import *
 import semseg.utils.attacker as attacker
