@@ -47,12 +47,12 @@ _________________________________
 <h4> Robust-Segmentation models</h4>
 
 We make our robust models publically available. 
-| model-name              | Dataset    | checkpoint                                                                  |
-|-------------------------|------------|-----------------------------------------------------------------------------|
-| UperNet-ConvNext-T_CVST | PASCAL-VOC | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/zSFgoAngcm47FZm)     |
-| UperNet-ConvNext-S_CVST | PASCAL-VOC | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
-| UperNet-ConvNext-T_CVST | ADE20K     | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/ACMQRiyfyXboXwT)     |
-| UperNet-ConvNext-S_CVST | ADE20K     | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
+| model-name              | Dataset    | Clean(mIoU) | Adv.(4/255) | Adv.(8/255) |    checkpoint                             |
+|-------------------------|------------|-------------|-------------|-------------|-------------------------------------------|
+| UperNet-ConvNext-T_CVST | PASCAL-VOC |     75.2%    |     63.8%    |     37.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/zSFgoAngcm47FZm)     |
+| UperNet-ConvNext-S_CVST | PASCAL-VOC |     76.6%    |     66.2%    |     38.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
+| UperNet-ConvNext-T_CVST | ADE20K     |     31.7%    |     18.6%    |     6.70%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/ACMQRiyfyXboXwT)     |
+| UperNet-ConvNext-S_CVST | ADE20K     |     32.1%    |     19.2%    |     7.20%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
 Note: the models are trained including the background class for both VOC and ADE20K.
 *SegMenter-ViT-S model available soon.
 
