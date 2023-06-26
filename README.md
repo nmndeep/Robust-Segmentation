@@ -64,12 +64,13 @@ _________________________________
 <h4>Required citations</h4>
 
 If you use our code/models consider citing us with the follwong BibTex entry:
-
-<code>@misc{croce2023robust,
-      title={Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models}, 
-      author={Francesco Croce and Naman D Singh and Matthias Hein},
-      year={2023},
-      journal={arXiv:2306.12941}}</code>
+```
+@article{croce2023robust,
+ title={Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models}, 
+ author={Francesco Croce and Naman D Singh and Matthias Hein},
+ year={2023},
+ journal={arXiv:2306.12941}}
+```
 
 Also consider citing [SegPGD](https://arxiv.org/abs/2207.12391) if you use SEA attack, as their loss funciton makes up a part of SEA evaluation.
 
@@ -77,4 +78,8 @@ Also consider citing [SegPGD](https://arxiv.org/abs/2207.12391) if you use SEA a
 
 The code in this repo is partially based on the following publically available codebases.
 
- [1](https://github.com/hszhao/semseg), [2](https://github.com/Tramac/awesome-semantic-segmentation-pytorch), [3](https://github.com/rstrudel/segmenter/),  [4](https://github.com/facebookresearch/ConvNeXt/tree/main/semantic_segmentation), and [5](https://huggingface.co/docs/transformers/main/en/model_doc/upernet#transformers.UperNetForSemanticSegmentation)
+-  [https://github.com/hszhao/semseg](https://github.com/hszhao/semseg)
+-  [https://github.com/Tramac/awesome-semantic-segmentation-pytorch](https://github.com/Tramac/awesome-semantic-segmentation-pytorch)
+-  [https://github.com/rstrudel/segmenter)](https://github.com/rstrudel/segmenter)
+-  [https://github.com/facebookresearch/ConvNeXt/tree/main/semantic_segmentation](https://github.com/facebookresearch/ConvNeXt/tree/main/semantic_segmentation)
+-  [https://huggingface.co/docs/transformers/main/en/model_doc/upernet#transformers.UperNetForSemanticSegmentation](https://huggingface.co/docs/transformers/main/en/model_doc/upernet#transformers.UperNetForSemanticSegmentation)
