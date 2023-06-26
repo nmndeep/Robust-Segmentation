@@ -1,5 +1,3 @@
-""" Taken from hugging-face transfromers."""
-
 from typing import List, Optional, Tuple, Union
 
 import torch
