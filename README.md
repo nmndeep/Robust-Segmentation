@@ -53,6 +53,7 @@ We make our robust models publically available.
 | UperNet-ConvNext-S_CVST | PASCAL-VOC | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
 | UperNet-ConvNext-T_CVST | ADE20K     | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/ACMQRiyfyXboXwT)     |
 | UperNet-ConvNext-S_CVST | ADE20K     | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
+Note: the models are trained including the background class for both VOC and ADE20K.
 *SegMenter model available soon.
 
 Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at)* github repository.
