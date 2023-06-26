@@ -53,12 +53,13 @@ We make our robust models publically available. mIoU is reported for clean evalu
 | UperNet-ConvNext-S_CVST | PASCAL-VOC |     76.6%    |     66.2%    |     38.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
 | UperNet-ConvNext-T_CVST | ADE20K     |     31.7%    |     18.6%    |     6.70%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/ACMQRiyfyXboXwT)     |
 | UperNet-ConvNext-S_CVST | ADE20K     |     32.1%    |     19.2%    |     7.20%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
-Note: the models are trained including the background class for both VOC and ADE20K.
+-------------------------------------------------------------------------------------------------
 *SegMenter-ViT-S model available soon.
+Note: the models are trained including the background class for both VOC and ADE20K.
 
 Robust pre-trained backbone models were taken from [Revisiting-AT](https://github.com/nmndeep/revisiting-at)* github repository.
 
-*Note: For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
+For UperNet we always use the ConvNext backbone with Convolution Stem (CvSt).
 _________________________________
 
 <h4>Required citations</h4>
