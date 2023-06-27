@@ -46,8 +46,8 @@ _________________________________
 
 <h4> Robust-Segmentation models</h4>
 
-We make our robust models publically available. mIoU is reported for clean evaluation and with SEA evaluation at two perturbation strengths.
-| model-name              | Dataset    | Clean(mIoU) | Adv.(4/255) | Adv.(8/255) |    checkpoint                             |
+We make our robust models publically available. mIoU is reported for clean evaluation and with SEA evaluation (Adv.) at two perturbation strengths.
+| model-name              | Dataset    | Clean | Adv.(4/255) | Adv.(8/255) |    checkpoint                             |
 |-------------------------|------------|-------------|-------------|-------------|-------------------------------------------|
 | UperNet-ConvNext-T_CVST | PASCAL-VOC |     75.2%    |     63.8%    |     37.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/zSFgoAngcm47FZm)     |
 | UperNet-ConvNext-S_CVST | PASCAL-VOC |     76.6%    |     66.2%    |     38.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
