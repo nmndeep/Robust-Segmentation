@@ -398,14 +398,3 @@ def main(cfg):
 
     print(tabulate(table, headers='keys'))
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='configs/custom.yaml')
-    args = parser.parse_args()
-
-    with open(args.cfg) as f:
-        cfg = yaml.load(f, Loader=yaml.SafeLoader)
-
-    setup_cudnn()
-    main(cfg)
