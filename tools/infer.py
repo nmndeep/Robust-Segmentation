@@ -6,8 +6,6 @@ from torch import Tensor
 from torch.nn import functional as F
 from pathlib import Path
 from torchvision import io
-from semseg.utils.utils import timer
-from semseg.utils.visualize import draw_text
 import torch.utils.data as data
 from torchvision import transforms
 from rich.console import Console
@@ -20,7 +18,6 @@ from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 from tools.val import Pgd_Attack, clean_accuracy
 from PIL import Image, ImageDraw, ImageFont
-import gc
 from autoattack.other_utils import check_imgs
 import torch.nn as nn
 from functools import partial
