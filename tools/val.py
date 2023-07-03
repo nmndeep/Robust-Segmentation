@@ -367,34 +367,5 @@ def evaluate_msf(model, dataloader, device, scales, flip):
     ious, miou = metrics.compute_iou()
     return acc, macc, f1, mf1, ious, miou
 
-
-def main(cfg):
-    device = torch.device(cfg['DEVICE'])
-
-    eval_cfg = cfg['EVAL']
-    transform = get_val_augmentation(eval_cfg['IMAGE_SIZE'])
-    dataset = eval(cfg['DATASET']['NAME'])(cfg['DATASET']['ROOT'], 'val', transform)
-    dataloader = DataLoader(dataset, 1, num_workers=1, pin_memory=True)
-
-    model_path = Path(eval_cfg['MODEL_PATH'])
-    if not model_path.exists(): model_path = Path(cfg['SAVE_DIR']) / f"{cfg['MODEL']['NAME']}_{cfg['MODEL']['BACKBONE']}_{cfg['DATASET']['NAME']}.pth"
-    print(f"Evaluating {model_path}...")
-
-    model = eval(cfg['MODEL']['NAME'])(cfg['MODEL']['BACKBONE'], dataset.n_classes)
-    model.load_state_dict(torch.load(str(model_path), map_location='cpu'))
-    model = model.to(device)
-
-    if eval_cfg['MSF']['ENABLE']:
-        acc, macc, f1, mf1, ious, miou = evaluate_msf(model, dataloader, device, eval_cfg['MSF']['SCALES'], eval_cfg['MSF']['FLIP'])
-    else:
-        acc, macc, f1, mf1, ious, miou = evaluate(model, dataloader, device)
-
-    table = {
-        'Class': list(dataset.CLASSES) + ['Mean'],
-        'IoU': ious + [miou],
-        'F1': f1 + [mf1],
-        'Acc': acc + [macc]
-    }
-
     print(tabulate(table, headers='keys'))
 
