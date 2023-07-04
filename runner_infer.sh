@@ -9,6 +9,6 @@
 # print info about current job
 
 scontrol show job $SLURM_JOB_ID 
-
+#make sure --adversarial flag is set for SEA evaluation
 python3 ./tools/infer.py --adversarial --cfg $1 --eps $2 
 
