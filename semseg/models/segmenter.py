@@ -11,11 +11,8 @@ from timm.models.helpers import load_pretrained, load_custom_pretrained
 from timm.models.vision_transformer import default_cfgs
 from timm.models.registry import register_model
 from timm.models.vision_transformer import _create_vision_transformer
-# from timm.models.vision_transformer import VisionTransformer
-
 from semseg.models.backbones.vit_encoder import VisionTransformer, ConvBlock, resize_pos_embed
 from semseg.models.heads.segmenter_decoder import DecoderLinear, MaskTransformer
-from semseg.utils.utils import normalize_model
 from timm.models import create_model
 from semseg.utils.utils import *
 
