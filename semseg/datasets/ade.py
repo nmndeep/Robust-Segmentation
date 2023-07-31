@@ -1,4 +1,4 @@
-"""Pascal ADE20K Semantic Segmentation Dataset."""
+"""ADE20K Semantic Segmentation Dataset."""
 import os
 import torch
 import numpy as np
@@ -44,7 +44,7 @@ class ADE20KSegmentation(SegmentationDataset):
     #NUM_CLASS = 150
 
     def __init__(self, root='../datasets/ade', split='test', mode=None, transform=None,
-                 n_cls=150, **kwargs):
+                 n_cls=151, **kwargs):
         super(ADE20KSegmentation, self).__init__(root, split, mode, transform, **kwargs)
         root = os.path.join(root, self.BASE_DIR)
         assert os.path.exists(root), "Please setup the dataset using ../datasets/ade20k.py"
