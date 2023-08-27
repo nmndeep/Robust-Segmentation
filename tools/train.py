@@ -1,7 +1,7 @@
-import sys
-sys.path.insert(0,'..')
+import sys,os
+sys.path.append(os.getcwd())
 import torch 
-import argparse, os
+import argparse
 import yaml
 import time
 import datetime
