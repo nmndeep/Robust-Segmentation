@@ -73,7 +73,7 @@ If you use our code/models consider citing us with the follwong BibTex entry:
  journal={arXiv:2306.12941}}
 ```
 
-Also consider citing [SegPGD](https://arxiv.org/abs/2207.12391) if you use SEA attack, as their loss funciton makes up a part of SEA evaluation.
+Also consider citing [SegPGD](https://arxiv.org/abs/2207.12391) if you use SEA attack, as their loss function makes up a part of SEA evaluation.
 
 <h5>Acknowledgements</h5>
 
