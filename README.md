@@ -53,6 +53,7 @@ We make our robust models publically available. mIoU is reported for clean evalu
 | UperNet-ConvNext-S_CVST | PASCAL-VOC |     76.6%    |     66.2%    |     38.0%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/MBXnMd5QKztmZaa)     |
 | UperNet-ConvNext-T_CVST | ADE20K     |     31.7%    |     18.6%    |     6.70%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/ACMQRiyfyXboXwT)     |
 | UperNet-ConvNext-S_CVST | ADE20K     |     32.1%    |     19.2%    |     7.20%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/Smogk2BWbfMxkyo)     |
+| Segmenter-ViT-S 	  | ADE20K     |     28.7%    |     16.1%    |     7.10%    | [Link](https://nc.mlcloud.uni-tuebingen.de/index.php/s/XF6Woa9G3eiGPig)     |
 -------------------------------------------------------------------------------------------------
 Note: the models are trained including the background class for both VOC and ADE20K.
 
