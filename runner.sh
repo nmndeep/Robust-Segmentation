@@ -10,4 +10,4 @@
 
 scontrol show job $SLURM_JOB_ID 
 
-python3 ./tools/train.py --cfg $1  --world_size $2
+python3 -m tools.train --cfg $1  --world_size $2
