@@ -6,7 +6,7 @@
 
 ECCV 2024
 
-Paper: [https://arxiv.org/abs/2306.12941](https://arxiv.org/abs/2306.12941)	
+Paper: Coming soon
 
 <h4>Abstract</h4>
 </div>
@@ -15,7 +15,7 @@ Adversarial robustness has been studied  extensively in image classification, es
 Surprisingly, existing attempts of adversarial training for semantic segmentation models turn out to be weak or even completely non-robust. We investigate why previous adaptations of adversarial training to semantic segmentation failed and  show how recently proposed robust ImageNet backbones can be used to obtain adversarially robust semantic segmentation models with up to six times less training time for PASCAL-VOC and the more challenging ADE20K.
 
 ---------------------------------
-<p align="center"><img src="assests/teaser.png" width="700"></p>
+<p align="center"><img src="/assets/teaser.png" width="700"></p>
 
 <div align="center">
 <h3> Robust Semantic Segmentation models</h3>
