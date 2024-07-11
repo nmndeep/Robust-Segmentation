@@ -93,7 +93,7 @@ _________________________________
 
 If you use our code/models consider citing us with the follwong BibTex entry:
 ```
-@@inproceedings{croce2023robust,
+@inproceedings{croce2024robust,
  title={Towards Reliable Evaluation and Fast Training of Robust Semantic Segmentation Models}, 
  author={Francesco Croce and Naman D Singh and Matthias Hein},
  year={2024},
