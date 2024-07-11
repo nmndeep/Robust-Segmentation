@@ -91,7 +91,7 @@ _________________________________
 
 <h4>Citation</h4>
 
-If you use our code/models consider citing us with the follwong BibTex entry:
+If you use our code/models consider citing us with the following BibTex entry:
 ```
 @inproceedings{croce2024robust,
  title={Towards Reliable Evaluation and Fast Training of Robust Semantic Segmentation Models}, 
