@@ -1,0 +1,25 @@
+# Set the maximum line length to 90.
+line-length = 70
+fix = true
+include = ["*.py"]
+preview = true
+
+[lint]
+extend-select = [
+  "UP",  # pyupgrade
+  "D211",   
+  "D213",
+  "E501", # linelength
+  "E301", #blank-line after each method def
+  "E303",
+  "F401", #unused imports
+  "E402",
+  "E401",
+  "F841",
+  "I001", 
+  "I002",
+  "UP032",
+  "E711", #comparisan to none
+  "E721", #use isinstance for type comaprison
+]
+

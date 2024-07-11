@@ -1,0 +1,55 @@
+DEVICE          : cuda              # device used for training and evaluation (cpu, cuda, cuda0, cuda1, ...)
+SAVE_DIR        : 'output-dir-path'         # output folder name used for saving the model, logs and inference results
+ADDENDUM        : 'will-be-appended-at-the-end-of-logfoldername'
+
+MODEL:                                    
+  NAME          : SegMenter                                           # name of the model you are using
+  BACKBONE      : vit_small_patch16_224                                                  # model variant
+  PRETRAINED    : 'Location-of-pretrained-backbone-model' 
+
+DATASET:
+  NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  ROOT          : data-dir-path                         # dataset root path
+  IGNORE_LABEL  : -1
+  N_CLS         : 151
+  SEED          : 0
+  
+TRAIN:
+  BASE_SIZE     : 520
+  IMAGE_SIZE    : [512, 512]      # training image size in (h, w)
+  BATCH_SIZE    : 14                 # batch size used to train
+  EPOCHS        : 32             # number of epochs to train
+  EVAL_INTERVAL : 32              # evaluation interval during training
+  ADVERSARIAL   : true
+  ATTACK        : pgd
+  LOSS_FN       : pgd
+  EPS           : 4
+  N_ITERS       : 5
+  FREEZE        : false
+  AMP           : false           # use AMP in training
+  DDP           : true           # use DDP training
+
+LOSS:
+  NAME          : CrossEntropy          # loss function name (ohemce, ce, dice)
+  CLS_WEIGHTS   : false            # use class weights in loss calculation
+
+OPTIMIZER:
+  NAME          : sgd           # optimizer name, default=sgd
+  LR            : 0.002          # initial learning rate used in optimizer
+  WEIGHT_DECAY  : 0.01            # decay rate used in optimizer 
+
+SCHEDULER:
+  NAME          : polylr    # scheduler name
+  POWER         : 0.9             # scheduler power
+  WARMUP        : 5              # warmup epochs used in scheduler
+  WARMUP_RATIO  : 0.00001             # warmup ratio
+  
+
+EVAL:
+  NAME          : ADE20K                                              # dataset name to be trained with (camvid, cityscapes, ade20k)
+  BACKBONE      : vit_small_patch16_224                                                 # model variant
+  N_CLS         : 151
+  MODEL_PATH    : 'path to checkpoint of evaluation model'
+  BASE_SIZE     : 520
+  IMAGE_SIZE    : [512, 512]        
+  BATCH_SIZE    : 24      
