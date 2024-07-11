@@ -93,7 +93,7 @@ _________________________________
 If you use our code/models consider citing us with the follwong BibTex entry:
 ```
 @article{croce2023robust,
- title={Robust Semantic Segmentation: Strong Adversarial Attacks and Fast Training of Robust Models}, 
+ title={Towards Reliable Evaluation and Fast Training of Robust Semantic Segmentation Models}, 
  author={Francesco Croce and Naman D Singh and Matthias Hein},
  year={2024},
  journal={ECCV}}
