@@ -55,7 +55,7 @@ SEA containes three complementary attacks
   
 The attacks are run sequentially and then:
 
-1. For `aACC` image-wise worst case over the attacks is taken.
+1. For `aACC`, image-wise worst case over the attacks is taken.
 
 2. For `mIoU`, the worst case is computed by updating the running-mIoU image/attack-wise.
 
