@@ -97,7 +97,7 @@ If you use our code/models consider citing us with the following BibTex entry:
  title={Towards Reliable Evaluation and Fast Training of Robust Semantic Segmentation Models}, 
  author={Francesco Croce and Naman D Singh and Matthias Hein},
  year={2024},
- journal={ECCV}}
+ booktitle={ECCV}}
 ```
 <h5>Acknowledgements</h5>
 
