@@ -6,7 +6,7 @@
 
 ECCV 2024
 
-Paper: Coming soon
+Paper: [https://arxiv.org/abs/2306.12941](https://arxiv.org/abs/2306.12941)
 
 <h4>Abstract</h4>
 </div>
